@@ -1,0 +1,17 @@
+# Python operational runtime artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Local development workspace states
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
