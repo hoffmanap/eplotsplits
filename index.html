@@ -280,6 +280,11 @@
 
         function populateDynamicDropdowns() {
             let zones = new Set();
+rawParcelsFeatures.forEach(f => {
+                let val = f.properties[ZONING_FIELD];
+                if (val) zones.add(val.toString());
+            });
+            Array.from(zones).sort().forEach(z => { filterZoning.add(new Option(z, z)); });
             
             rawParcelsFeatures.forEach(f => {
                 if (!f.properties) return;
