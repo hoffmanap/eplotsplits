@@ -159,313 +159,351 @@
         </section>
     </main>
 
-    <script>
-        // App Memory State Space Matrix
-        let map;
-        let parcelLayer, buildingLayer, historicLayer;
-        let selectedParcelFeature = null;
+   <script>
+// App Memory State Space Matrix
+let map;
+let parcelLayer, buildingLayer, historicLayer;
+let selectedParcelFeature = null;
 
-        // Structured GeoJSON Layer Catalogs
-        let rawParcelsGeoJSON = null;
-        let rawBuildingsGeoJSON = null;
-        let rawHistoricGeoJSON = null;
+// Structured GeoJSON Layer Catalogs
+// Initialized as a blank FeatureCollection to hold the combined split files
+let rawParcelsGeoJSON = { type: "FeatureCollection", features: [] }; 
+let rawBuildingsGeoJSON = null;
+let rawHistoricGeoJSON = null;
+let hexGridLayerGroup; // Added to hold the 5 hex files
 
-        // UI Node Element Hook Selectors
-        const sliderMinLot = document.getElementById('param-min-lot');
-        const sliderMinWidth = document.getElementById('param-min-width');
-        const toggleFootprints = document.getElementById('param-toggle-footprints');
-        const toggleHistoric = document.getElementById('param-toggle-historic');
-        const filterZoning = document.getElementById('filter-zoning');
-        const filterContext = document.getElementById('filter-context');
-        const searchAddress = document.getElementById('search-address');
-        const searchDropdown = document.getElementById('search-results-dropdown');
-        
-        const lblMinLot = document.getElementById('val-min-lot');
-        const lblMinWidth = document.getElementById('val-min-width');
-        const countEligible = document.getElementById('stat-eligible-count');
-        const countHousing = document.getElementById('stat-housing-yield');
-        const feedbackLog = document.getElementById('canvas-feedback');
+// UI Node Element Hook Selectors
+const sliderMinLot = document.getElementById('param-min-lot');
+const sliderMinWidth = document.getElementById('param-min-width');
+const toggleFootprints = document.getElementById('param-toggle-footprints');
+const toggleHistoric = document.getElementById('param-toggle-historic');
+const filterZoning = document.getElementById('filter-zoning');
+const filterContext = document.getElementById('filter-context');
+const searchAddress = document.getElementById('search-address');
+const searchDropdown = document.getElementById('search-results-dropdown');
 
-        function initDashboard() {
-            // Initialize Map
-            map = L.map('map-canvas', {
-                center: [31.7619, -106.4850],
-                zoom: 15,
-                zoomControl: false
-            });
+const lblMinLot = document.getElementById('val-min-lot');
+const lblMinWidth = document.getElementById('val-min-width');
+const countEligible = document.getElementById('stat-eligible-count');
+const countHousing = document.getElementById('stat-housing-yield');
+const feedbackLog = document.getElementById('canvas-feedback');
 
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; CARTO'
-            }).addTo(map);
+function initDashboard() {
+    // Initialize Map
+    map = L.map('map-canvas', { center: [31.7619, -106.4850], zoom: 15, zoomControl: false });
 
-            L.control.zoom({ position: 'topright' }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; CARTO'
+    }).addTo(map);
 
-            // Setup Layers
-            parcelLayer = L.geoJSON(null, {
-                style: getParcelSymbology,
-                onEachFeature: registerFeatureEvents
-            }).addTo(map);
+    L.control.zoom({ position: 'topright' }).addTo(map);
 
-            buildingLayer = L.geoJSON(null, {
-                style: { color: '#ef4444', weight: 0.8, fillColor: '#f87171', fillOpacity: 0.4, interactive: false }
-            }).addTo(map);
+    // Setup Layers
+    parcelLayer = L.geoJSON(null, { style: getParcelSymbology, onEachFeature: registerFeatureEvents }).addTo(map);
+    
+    buildingLayer = L.geoJSON(null, {
+        style: { color: '#ef4444', weight: 0.8, fillColor: '#f87171', fillOpacity: 0.4, interactive: false }
+    }).addTo(map);
 
-            historicLayer = L.geoJSON(null, {
-                style: { color: '#f59e0b', weight: 1.5, fillColor: '#d97706', fillOpacity: 0.1, dashArray: '5, 5', interactive: false }
-            }).addTo(map);
+    historicLayer = L.geoJSON(null, {
+        style: { color: '#f59e0b', weight: 1.5, fillColor: '#d97706', fillOpacity: 0.1, dashArray: '5, 5', interactive: false }
+    }).addTo(map);
 
-            // Bind Events
-            sliderMinLot.addEventListener('input', (e) => { lblMinLot.innerText = Number(e.target.value).toLocaleString(); calculateLiveYields(); });
-            sliderMinWidth.addEventListener('input', (e) => { lblMinWidth.innerText = e.target.value; calculateLiveYields(); });
-            filterZoning.addEventListener('change', calculateLiveYields);
-            filterContext.addEventListener('change', calculateLiveYields);
-            
-            toggleFootprints.addEventListener('change', () => {
-                if (toggleFootprints.checked && rawBuildingsGeoJSON) buildingLayer.addData(rawBuildingsGeoJSON);
-                else buildingLayer.clearLayers();
-                calculateLiveYields();
-            });
+    // Setup Layer Group for Hexagons
+    hexGridLayerGroup = L.layerGroup().addTo(map);
 
-            toggleHistoric.addEventListener('change', () => {
-                if (toggleHistoric.checked && rawHistoricGeoJSON) historicLayer.addData(rawHistoricGeoJSON);
-                else historicLayer.clearLayers();
-                calculateLiveYields();
-            });
+    // Add Layer Control toggles to the map
+    L.control.layers(null, {
+        "Eligible Parcels": parcelLayer,
+        "Hexagon Grid": hexGridLayerGroup
+    }, { position: 'bottomright' }).addTo(map);
 
-            searchAddress.addEventListener('input', queryAddressMatrix);
+    // Bind Events
+    sliderMinLot.addEventListener('input', (e) => {
+        lblMinLot.innerText = Number(e.target.value).toLocaleString();
+        calculateLiveYields();
+    });
+    sliderMinWidth.addEventListener('input', (e) => {
+        lblMinWidth.innerText = e.target.value;
+        calculateLiveYields();
+    });
+    filterZoning.addEventListener('change', calculateLiveYields);
+    filterContext.addEventListener('change', calculateLiveYields);
 
-            loadLocalSpatialAssets();
+    toggleFootprints.addEventListener('change', () => {
+        if (toggleFootprints.checked && rawBuildingsGeoJSON) buildingLayer.addData(rawBuildingsGeoJSON);
+        else buildingLayer.clearLayers();
+        calculateLiveYields();
+    });
+
+    toggleHistoric.addEventListener('change', () => {
+        if (toggleHistoric.checked && rawHistoricGeoJSON) historicLayer.addData(rawHistoricGeoJSON);
+        else historicLayer.clearLayers();
+        calculateLiveYields();
+    });
+
+    searchAddress.addEventListener('input', queryAddressMatrix);
+
+    loadLocalSpatialAssets();
+}
+
+async function loadLocalSpatialAssets() {
+    setLoadingState("Mounting Local Geospatial Vectors...");
+    try {
+        // 1. Fetch static background layers
+        const [resBuildings, resHistoric] = await Promise.all([
+            fetch('data/eligible_buildings.geojson').catch(() => null),
+            fetch('data/historic.geojson').catch(() => null)
+        ]);
+
+        if (resBuildings && resBuildings.ok) rawBuildingsGeoJSON = await resBuildings.json();
+        if (resHistoric && resHistoric.ok) rawHistoricGeoJSON = await resHistoric.json();
+
+        if (rawBuildingsGeoJSON && toggleFootprints.checked) buildingLayer.addData(rawBuildingsGeoJSON);
+        if (rawHistoricGeoJSON && toggleHistoric.checked) historicLayer.addData(rawHistoricGeoJSON);
+
+        // 2. Fetch split eligible parcels (Parts 1-5)
+        for (let i = 1; i <= 5; i++) {
+            const res = await fetch(`data/eligible_parcels_${i}.geojson`).catch(() => null);
+            if (res && res.ok) {
+                const data = await res.json();
+                // Push data to master array for Turf.js math
+                rawParcelsGeoJSON.features.push(...data.features); 
+                // Add data to map layer
+                parcelLayer.addData(data); 
+            }
         }
 
-        async function loadLocalSpatialAssets() {
-            setLoadingState("Mounting Local Geospatial Vectors...");
-            try {
-                // Fetch files gracefully. By appending .catch(() => null), the Promise.all won't fail entirely if one file (like eligible_buildings.geojson) is missing.
-                const [resParcels, resBuildings, resHistoric] = await Promise.all([
-                    fetch('data/eligible_parcels.geojson').catch(() => null),
-                    fetch('data/eligible_buildings.geojson').catch(() => null),
-                    fetch('data/historic.geojson').catch(() => null)
-                ]);
+        // 3. Fetch split El Paso hexagons (Parts 1-5)
+        for (let i = 1; i <= 5; i++) {
+            const res = await fetch(`data/el_paso_macro_hexagons_${i}.geojson`).catch(() => null);
+            if (res && res.ok) {
+                const data = await res.json();
+                L.geoJSON(data, { 
+                    style: { color: '#8b5cf6', weight: 1, fillOpacity: 0.1, interactive: false } 
+                }).addTo(hexGridLayerGroup);
+            }
+        }
 
-                // Safely parse JSON only if the response is OK. This prevents the "Unexpected token" crash if a file is an LFS pointer or a 404 HTML error page.
-                if (resParcels && resParcels.ok) {
-                    try { rawParcelsGeoJSON = await resParcels.json(); } 
-                    catch(e) { console.warn("Error parsing parcels. Ensure it is raw JSON and not a Git LFS pointer.", e); }
-                }
-                if (resBuildings && resBuildings.ok) {
-                    try { rawBuildingsGeoJSON = await resBuildings.json(); } 
-                    catch(e) { console.warn("Error parsing buildings.", e); }
-                }
-                if (resHistoric && resHistoric.ok) {
-                    try { rawHistoricGeoJSON = await resHistoric.json(); } 
-                    catch(e) { console.warn("Error parsing historic layer.", e); }
-                }
+        // Snap map to parcel bounds
+        if (rawParcelsGeoJSON.features.length > 0) {
+            map.fitBounds(parcelLayer.getBounds());
+        }
 
-                // Add data to layers if they successfully parsed
-                if (rawParcelsGeoJSON) {
-                    parcelLayer.addData(rawParcelsGeoJSON);
-                    if (rawParcelsGeoJSON.features.length > 0) {
-                        map.fitBounds(L.geoJSON(rawParcelsGeoJSON).getBounds());
+        // Trigger math
+        calculateLiveYields();
+
+        feedbackLog.innerHTML = `<div class="md:col-span-3 text-center text-slate-500 italic">Initialize architectural site inspection by using the address search locator or selecting a parcel polygon inside the map canvas frame.</div>`;
+
+    } catch (err) {
+        setLoadingState(`Ingest Exception Encountered: ${err.message}.`);
+        console.error(err);
+    }
+}
+
+function getParcelSymbology(feature) {
+    return { color: '#1e293b', weight: 1, fillColor: '#0f766e', fillOpacity: 0.35 };
+}
+
+function registerFeatureEvents(feature, layer) {
+    layer.on({
+        click: (e) => { triggerMicroSiteInspection(feature, e.target); },
+        mouseover: (e) => {
+            if(selectedParcelFeature !== feature) {
+                e.target.setStyle({ fillOpacity: 0.6, color: '#38bdf8', weight: 1.5 });
+            }
+        },
+        mouseout: (e) => {
+            if(selectedParcelFeature !== feature) {
+                parcelLayer.resetStyle(e.target);
+            }
+        }
+    });
+}
+
+function calculateLiveYields() {
+    if (!rawParcelsGeoJSON || rawParcelsGeoJSON.features.length === 0) return;
+
+    const minAreaSqFt = parseFloat(sliderMinLot.value);
+    const zoningSelection = filterZoning.value;
+    const contextSelection = filterContext.value;
+    const footprintsActive = toggleFootprints.checked;
+    const historicProhibited = toggleHistoric.checked;
+
+    let eligibleLotsCounter = 0;
+    let housingUnitsAccumulator = 0;
+
+    rawParcelsGeoJSON.features.forEach(parcel => {
+        const props = parcel.properties || {};
+
+        const parcelZoning = props.zoning || props.ZONING || "Unknown";
+        if (zoningSelection !== "ALL" && parcelZoning !== zoningSelection) {
+            parcel.isFilteredOut = true;
+            return;
+        }
+
+        const parcelContext = props.context || props.Context || props.CONTEXT || "Unknown";
+        if (contextSelection !== "ALL" && parcelContext !== contextSelection) {
+            parcel.isFilteredOut = true;
+            return;
+        }
+
+        parcel.isFilteredOut = false;
+
+        let isHistoricDisqualified = false;
+        if (historicProhibited && rawHistoricGeoJSON) {
+            for (let block of rawHistoricGeoJSON.features) {
+                if (turf.booleanIntersects(parcel, block)) {
+                    isHistoricDisqualified = true;
+                    break;
+                }
+            }
+        }
+
+        if (isHistoricDisqualified) {
+             parcel.isFilteredOut = true;
+             return;
+        }
+
+        let parcelResidualArea = turf.area(parcel) * 10.7639;
+
+        if (footprintsActive && rawBuildingsGeoJSON) {
+            rawBuildingsGeoJSON.features.forEach(building => {
+                if (turf.booleanIntersects(parcel, building)) {
+                    try {
+                        const overlapClip = turf.intersection(turf.featureCollection([parcel, building]));
+                        if (overlapClip) {
+                            parcelResidualArea -= (turf.area(overlapClip) * 10.7639);
+                        }
+                    } catch (err) {}
+                }
+            });
+        }
+
+        if (parcelResidualArea >= (minAreaSqFt * 2)) {
+            eligibleLotsCounter++;
+            housingUnitsAccumulator += 2;
+        } else {
+             parcel.isFilteredOut = true;
+        }
+    });
+
+    countEligible.innerText = eligibleLotsCounter.toLocaleString();
+    countHousing.innerText = housingUnitsAccumulator.toLocaleString();
+
+    parcelLayer.setStyle(f => {
+        if(f.isFilteredOut) return { fillOpacity: 0, weight: 0, opacity: 0, interactive: false };
+        return getParcelSymbology(f);
+    });
+}
+
+function triggerMicroSiteInspection(feature, leafletLayer) {
+    selectedParcelFeature = feature;
+    parcelLayer.resetStyle();
+    
+    if(leafletLayer) {
+        leafletLayer.setStyle({ color: '#06b6d4', weight: 2.5, fillOpacity: 0.6, fillColor: '#0891b2' });
+        map.panTo(leafletLayer.getBounds().getCenter());
+    }
+
+    const props = feature.properties || {};
+    const grossArea = turf.area(feature) * 10.7639;
+    let netBuildableArea = grossArea;
+    let buildingIntersectionsCount = 0;
+    let insideHistoricZone = false;
+
+    if (rawHistoricGeoJSON) {
+        for (let block of rawHistoricGeoJSON.features) {
+            if (turf.booleanIntersects(feature, block)) {
+                insideHistoricZone = true;
+                break;
+            }
+        }
+    }
+
+    if (rawBuildingsGeoJSON) {
+        rawBuildingsGeoJSON.features.forEach(building => {
+            if (turf.booleanIntersects(feature, building)) {
+                buildingIntersectionsCount++;
+                try {
+                    const intersection = turf.intersection(turf.featureCollection([feature, building]));
+                    if (intersection) {
+                        netBuildableArea -= (turf.area(intersection) * 10.7639);
                     }
-                } else {
-                    setLoadingState("Error: Parcel data could not be parsed. Please ensure 'eligible_parcels.geojson' is raw JSON and not a Git LFS pointer.");
-                    return; // Halt if primary data is missing
-                }
+                } catch (e) {}
+            }
+        });
+    }
 
-                if (rawBuildingsGeoJSON && toggleFootprints.checked) buildingLayer.addData(rawBuildingsGeoJSON);
-                if (rawHistoricGeoJSON && toggleHistoric.checked) historicLayer.addData(rawHistoricGeoJSON);
+    const activeMinAreaThreshold = parseFloat(sliderMinLot.value);
+    let validationStatusHTML = "";
 
-                calculateLiveYields();
+    if (insideHistoricZone && toggleHistoric.checked) {
+        validationStatusHTML = `<div class="bg-red-950/40 border border-red-800 text-red-400 p-3 rounded-lg text-center font-bold">🚫 POLICY DISQUALIFICATION<br><span class="text-[10px] font-normal font-sans text-slate-300">Parcels inside historic layers are barred under active settings.</span></div>`;
+    } else if (netBuildableArea >= (activeMinAreaThreshold * 2)) {
+        validationStatusHTML = `<div class="bg-emerald-950/40 border border-emerald-800 text-emerald-400 p-3 rounded-lg text-center font-bold">✅ SITE ELIGIBLE FOR SPLIT<br><span class="text-[10px] font-normal font-sans text-slate-300">Residual space sustains a subdivision layout cleanly.</span></div>`;
+    } else {
+        validationStatusHTML = `<div class="bg-rose-950/40 border border-rose-800 text-rose-400 p-3 rounded-lg text-center font-bold">❌ INSUFFICIENT NET AREA<br><span class="text-[10px] font-normal font-sans text-slate-300">Residual space drops below required limits</span></div>`;
+    }
+
+    feedbackLog.innerHTML = `
+        <div class="col-span-1">
+            <span class="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Gross Parcel Area</span>
+            <span class="text-lg font-bold text-slate-200">${Math.round(grossArea).toLocaleString()} <span class="text-xs text-slate-500 font-normal">sq ft</span></span>
+        </div>
+        <div class="col-span-1 border-l border-slate-800 pl-4">
+            <span class="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Net Buildable Area</span>
+            <span class="text-lg font-bold text-teal-400">${Math.round(netBuildableArea).toLocaleString()} <span class="text-xs text-slate-500 font-normal">sq ft</span></span>
+        </div>
+        <div class="col-span-1 border-l border-slate-800 pl-4">
+            <span class="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Structure Overlaps</span>
+            <span class="text-lg font-bold text-rose-400">${buildingIntersectionsCount} <span class="text-xs text-slate-500 font-normal">bldgs</span></span>
+        </div>
+        <div class="md:col-span-3 mt-2">${validationStatusHTML}</div>
+    `;
+}
+
+function queryAddressMatrix(e) {
+    const query = e.target.value.toLowerCase();
+    searchDropdown.innerHTML = '';
+    
+    if (query.length < 3) {
+        searchDropdown.classList.add('hidden');
+        return;
+    }
+
+    const matches = rawParcelsGeoJSON.features.filter(f => {
+        const addr = f.properties.address || f.properties.SITUS_ADDR || "";
+        return addr.toLowerCase().includes(query);
+    }).slice(0, 5); 
+
+    if (matches.length === 0) {
+        searchDropdown.innerHTML = `<div class="p-2 text-slate-500 italic text-center">No address matches located</div>`;
+    } else {
+        matches.forEach(item => {
+            const addrStr = item.properties.address || item.properties.SITUS_ADDR;
+            const node = document.createElement('div');
+            node.className = "p-2 hover:bg-slate-800 cursor-pointer border-b border-slate-800 last:border-0 text-slate-200 transition-colors";
+            node.innerText = addrStr;
+            node.addEventListener('click', () => {
+                searchAddress.value = addrStr;
+                searchDropdown.classList.add('hidden');
                 
-                // Clear the loading message and restore default prompt
-                feedbackLog.innerHTML = `<div class="md:col-span-3 text-center text-slate-500 italic">Initialize architectural site inspection by using the address search locator or selecting a parcel polygon inside the map canvas frame.</div>`;
-
-            } catch (err) {
-                setLoadingState(`Ingest Exception Encountered: ${err.message}.`);
-                console.error(err);
-            }
-        }
-
-        function getParcelSymbology(feature) {
-            return { color: '#1e293b', weight: 1, fillColor: '#0f766e', fillOpacity: 0.35 };
-        }
-
-        function registerFeatureEvents(feature, layer) {
-            layer.on({
-                click: (e) => { triggerMicroSiteInspection(feature, e.target); },
-                mouseover: (e) => { if(selectedParcelFeature !== feature) e.target.setStyle({ fillOpacity: 0.6, color: '#38bdf8', weight: 1.5 }); },
-                mouseout: (e) => { if(selectedParcelFeature !== feature) parcelLayer.resetStyle(e.target); }
-            });
-        }
-
-        function calculateLiveYields() {
-            if (!rawParcelsGeoJSON) return;
-
-            const minAreaSqFt = parseFloat(sliderMinLot.value);
-            const zoningSelection = filterZoning.value;
-            const contextSelection = filterContext.value;
-            const footprintsActive = toggleFootprints.checked;
-            const historicProhibited = toggleHistoric.checked;
-
-            let eligibleLotsCounter = 0;
-            let housingUnitsAccumulator = 0;
-
-            rawParcelsGeoJSON.features.forEach(parcel => {
-                const props = parcel.properties || {};
-
-                // Flexible property matching
-                const parcelZoning = props.zoning || props.ZONING || "Unknown";
-                if (zoningSelection !== "ALL" && parcelZoning !== zoningSelection) {
-                    parcel.isFilteredOut = true; return;
-                }
-
-                const parcelContext = props.context || props.Context || props.CONTEXT || "Unknown";
-                if (contextSelection !== "ALL" && parcelContext !== contextSelection) {
-                    parcel.isFilteredOut = true; return;
-                }
-
-                parcel.isFilteredOut = false;
-
-                let isHistoricDisqualified = false;
-                if (historicProhibited && rawHistoricGeoJSON) {
-                    for (let block of rawHistoricGeoJSON.features) {
-                        if (turf.booleanIntersects(parcel, block)) {
-                            isHistoricDisqualified = true; break;
-                        }
-                    }
-                }
-
-                if (isHistoricDisqualified) return;
-
-                let parcelResidualArea = turf.area(parcel) * 10.7639;
-
-                if (footprintsActive && rawBuildingsGeoJSON) {
-                    rawBuildingsGeoJSON.features.forEach(building => {
-                        if (turf.booleanIntersects(parcel, building)) {
-                            try {
-                                const overlapClip = turf.intersection(turf.featureCollection([parcel, building]));
-                                if (overlapClip) { parcelResidualArea -= (turf.area(overlapClip) * 10.7639); }
-                            } catch (err) {}
-                        }
-                    });
-                }
-
-                if (parcelResidualArea >= (minAreaSqFt * 2)) {
-                    eligibleLotsCounter++;
-                    housingUnitsAccumulator += 2;
-                }
-            });
-
-            countEligible.innerText = eligibleLotsCounter.toLocaleString();
-            countHousing.innerText = housingUnitsAccumulator.toLocaleString();
-
-            parcelLayer.setStyle(f => {
-                if(f.isFilteredOut) return { fillOpacity: 0, weight: 0, opacity: 0, interactive: false };
-                return getParcelSymbology(f);
-            });
-        }
-
-        function triggerMicroSiteInspection(feature, leafletLayer) {
-            selectedParcelFeature = feature;
-            parcelLayer.resetStyle();
-            
-            if(leafletLayer) {
-                leafletLayer.setStyle({ color: '#06b6d4', weight: 2.5, fillOpacity: 0.6, fillColor: '#0891b2' });
-                map.panTo(leafletLayer.getBounds().getCenter());
-            }
-
-            const props = feature.properties || {};
-            const grossArea = turf.area(feature) * 10.7639;
-            let netBuildableArea = grossArea;
-            let buildingIntersectionsCount = 0;
-            let insideHistoricZone = false;
-
-            if (rawHistoricGeoJSON) {
-                for (let block of rawHistoricGeoJSON.features) {
-                    if (turf.booleanIntersects(feature, block)) { insideHistoricZone = true; break; }
-                }
-            }
-
-            if (rawBuildingsGeoJSON) {
-                rawBuildingsGeoJSON.features.forEach(building => {
-                    if (turf.booleanIntersects(feature, building)) {
-                        buildingIntersectionsCount++;
-                        try {
-                            const intersection = turf.intersection(turf.featureCollection([feature, building]));
-                            if (intersection) { netBuildableArea -= (turf.area(intersection) * 10.7639); }
-                        } catch (e) {}
-                    }
+                parcelLayer.eachLayer(layer => {
+                    if (layer.feature === item) { triggerMicroSiteInspection(item, layer); }
                 });
-            }
+            });
+            searchDropdown.appendChild(node);
+        });
+    }
+    searchDropdown.classList.remove('hidden');
+}
 
-            const activeMinAreaThreshold = parseFloat(sliderMinLot.value);
-            let validationStatusHTML = "";
+function setLoadingState(msg) {
+    feedbackLog.innerHTML = `<div class="md:col-span-3 text-center font-mono text-xs text-teal-400 animate-pulse mt-4">${msg}</div>`;
+}
 
-            if (insideHistoricZone && toggleHistoric.checked) {
-                validationStatusHTML = `<div class="bg-red-950/40 border border-red-800 text-red-400 p-3 rounded-lg text-center font-bold">🚫 POLICY DISQUALIFICATION<br><span class="text-[10px] font-normal font-sans text-slate-300">Parcels inside historic layers are barred under active settings.</span></div>`;
-            } else if (netBuildableArea >= (activeMinAreaThreshold * 2)) {
-                validationStatusHTML = `<div class="bg-emerald-950/40 border border-emerald-800 text-emerald-400 p-3 rounded-lg text-center font-bold">✅ SITE ELIGIBLE FOR SPLIT<br><span class="text-[10px] font-normal font-sans text-slate-300">Residual space sustains a subdivision layout cleanly.</span></div>`;
-            } else {
-                validationStatusHTML = `<div class="bg-rose-950/40 border border-rose-800 text-rose-400 p-3 rounded-lg text-center font-bold">❌ INSUFFICIENT NET AREA<br><span class="text-[10px] font-normal font-sans text-slate-300">Residual space drops below required limits (${(activeMinAreaThreshold * 2).toLocaleString()} sq ft).</span></div>`;
-            }
-
-            feedbackLog.innerHTML = `
-                <div class="bg-slate-900 p-3 rounded-xl border border-slate-800 space-y-1.5 shadow-md h-full">
-                    <div class="text-slate-400 text-[10px] uppercase tracking-wider text-teal-400 font-bold mb-2">// Core Attributes</div>
-                    <div><span class="text-slate-500">Address:</span> <span class="text-slate-200">${props.address || props.SITUS_ADDR || 'Unspecified'}</span></div>
-                    <div><span class="text-slate-500">Zoning Code:</span> <span class="text-slate-200 font-bold">${props.zoning || props.ZONING || 'N/A'}</span></div>
-                    <div><span class="text-slate-500">Typology:</span> <span class="text-slate-200">${props.context || props.Context || props.CONTEXT || 'General Urban'}</span></div>
-                </div>
-                <div class="bg-slate-900 p-3 rounded-xl border border-slate-800 space-y-1.5 shadow-md h-full">
-                    <div class="text-slate-400 text-[10px] uppercase tracking-wider text-teal-400 font-bold mb-2">// Spatial Metrics</div>
-                    <div><span class="text-slate-500">Gross Area:</span> <span class="text-slate-200">${Math.round(grossArea).toLocaleString()} sq ft</span></div>
-                    <div><span class="text-slate-500">Structures:</span> <span class="text-slate-200">${buildingIntersectionsCount} detected</span></div>
-                    <div><span class="text-slate-500">Net Space:</span> <span class="text-cyan-400 font-bold">${Math.round(netBuildableArea).toLocaleString()} sq ft</span></div>
-                </div>
-                <div class="flex flex-col justify-center h-full">
-                    ${validationStatusHTML}
-                </div>
-            `;
-        }
-
-        function queryAddressMatrix(e) {
-            const query = e.target.value.toLowerCase().trim();
-            searchDropdown.innerHTML = "";
-            
-            if (!query || !rawParcelsGeoJSON) { searchDropdown.classList.add('hidden'); return; }
-
-            const matches = rawParcelsGeoJSON.features.filter(f => {
-                const addr = f.properties.address || f.properties.SITUS_ADDR || "";
-                return addr.toLowerCase().includes(query);
-            }).slice(0, 5); 
-
-            if (matches.length === 0) {
-                searchDropdown.innerHTML = `<div class="p-2 text-slate-500 italic text-center">No address matches located</div>`;
-            } else {
-                matches.forEach(item => {
-                    const addrStr = item.properties.address || item.properties.SITUS_ADDR;
-                    const node = document.createElement('div');
-                    node.className = "p-2 hover:bg-slate-800 cursor-pointer border-b border-slate-800 last:border-0 text-slate-200 transition-colors";
-                    node.innerText = addrStr;
-                    node.addEventListener('click', () => {
-                        searchAddress.value = addrStr;
-                        searchDropdown.classList.add('hidden');
-                        
-                        parcelLayer.eachLayer(layer => {
-                            if (layer.feature === item) { triggerMicroSiteInspection(item, layer); }
-                        });
-                    });
-                    searchDropdown.appendChild(node);
-                });
-            }
-            searchDropdown.classList.remove('hidden');
-        }
-
-        function setLoadingState(msg) {
-            feedbackLog.innerHTML = `<div class="md:col-span-3 text-center font-mono text-xs text-teal-400 animate-pulse mt-4">${msg}</div>`;
-        }
-
-        window.onload = initDashboard;
-    </script>
+window.onload = initDashboard;
+</script>
 </body>
 </html>
