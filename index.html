@@ -19,14 +19,13 @@
             padding: 0; 
             background-color: #0b0f19; 
             overflow: hidden; 
-            font-family: 'Space Grotesk', sans-serif; /* Applied new tech font */
+            font-family: 'Space Grotesk', sans-serif; 
         }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
         #map-canvas { height: 100%; width: 100%; min-height: 500px; background: #0b0f19; }
         
-        /* Tooltip styling for modern feel */
         .leaflet-tooltip {
             background: #0f172a;
             border: 1px solid #1e293b;
@@ -91,18 +90,25 @@
             <h3 class="text-xs font-bold text-slate-200 tracking-widest uppercase mb-3 flex items-center gap-2">
                 <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span> Categorical Scopes
             </h3>
-            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6 space-y-4 shadow-inner">
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6 space-y-5 shadow-inner">
                 <div>
-                    <label class="text-[10px] text-slate-400 uppercase tracking-widest block mb-1">Zoning Filter</label>
+                    <label class="text-[10px] text-slate-400 uppercase tracking-widest block mb-2">Zoning Filter</label>
                     <select id="filter-zoning" class="w-full bg-slate-900 border border-slate-700 rounded text-xs p-2 text-slate-200 outline-none focus:border-teal-400 transition-colors cursor-pointer">
-                        <option value="ALL">All Zoning</option>
+                        <option value="ALL">All Zoning Types</option>
                     </select>
                 </div>
                 <div>
-                    <label class="text-[10px] text-slate-400 uppercase tracking-widest block mb-1">Context Matrix</label>
-                    <select id="filter-context" class="w-full bg-slate-900 border border-slate-700 rounded text-xs p-2 text-slate-200 outline-none focus:border-teal-400 transition-colors cursor-pointer">
-                        <option value="ALL">All Contexts</option>
-                    </select>
+                    <label class="text-[10px] text-slate-400 uppercase tracking-widest block mb-2">Context Matrix</label>
+                    <div class="flex gap-4">
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input type="checkbox" id="filter-context-urban" checked class="w-4 h-4 accent-cyan-400 rounded border-slate-700 cursor-pointer">
+                            <span class="text-xs text-slate-300 group-hover:text-slate-100 transition-colors">Urban</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer group">
+                            <input type="checkbox" id="filter-context-suburban" checked class="w-4 h-4 accent-cyan-400 rounded border-slate-700 cursor-pointer">
+                            <span class="text-xs text-slate-300 group-hover:text-slate-100 transition-colors">Suburban</span>
+                        </label>
+                    </div>
                 </div>
             </div>
 
@@ -111,11 +117,11 @@
             </h3>
             <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-4 shadow-inner">
                 <label class="flex items-center gap-3 cursor-pointer group">
-                    <input type="checkbox" id="param-toggle-footprints" class="w-4 h-4 accent-rose-500 rounded border-slate-700">
+                    <input type="checkbox" id="param-toggle-footprints" class="w-4 h-4 accent-rose-500 rounded border-slate-700 cursor-pointer">
                     <span class="text-xs text-slate-300 group-hover:text-slate-100 transition-colors">Deduct Building Footprints <span class="text-[9px] text-slate-500 block">(Increases calculation time)</span></span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer group">
-                    <input type="checkbox" id="param-toggle-historic" class="w-4 h-4 accent-amber-500 rounded border-slate-700">
+                    <input type="checkbox" id="param-toggle-historic" class="w-4 h-4 accent-amber-500 rounded border-slate-700 cursor-pointer">
                     <span class="text-xs text-slate-300 group-hover:text-slate-100 transition-colors">Exclude Historic Districts</span>
                 </label>
             </div>
@@ -134,10 +140,11 @@
     <script>
         // Data & Maps
         let map;
-        let parcelLayerGroup, hexLayerGroup, buildingLayer, historicLayer;
+        let parcelLayerGroup, hexLayerGroup, buildingLayer, historicLayer, contextLayerGroup;
         let rawParcelsFeatures = [];
         let rawBuildingsGeoJSON = null;
         let rawHistoricGeoJSON = null;
+        let parsedContextAreas = [];
         
         // UI Nodes
         const feedbackLog = document.getElementById('canvas-feedback');
@@ -146,14 +153,15 @@
         const sldLot = document.getElementById('param-min-lot');
         const sldWidth = document.getElementById('param-min-width');
         const filterZoning = document.getElementById('filter-zoning');
-        const filterContext = document.getElementById('filter-context');
+        const chkUrban = document.getElementById('filter-context-urban');
+        const chkSuburban = document.getElementById('filter-context-suburban');
         const chkBuildings = document.getElementById('param-toggle-footprints');
         const chkHistoric = document.getElementById('param-toggle-historic');
 
         let calcTimeout; 
 
         function initMap() {
-            // PERFORMANCE FIX 1: preferCanvas: true tells Leaflet to use HTML5 Canvas instead of heavy SVGs. Huge speed boost.
+            // High-performance canvas renderer
             map = L.map('map-canvas', { center: [31.7619, -106.4850], zoom: 12, zoomControl: false, preferCanvas: true });
             
             L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -163,16 +171,22 @@
 
             parcelLayerGroup = L.layerGroup().addTo(map);
             hexLayerGroup = L.layerGroup().addTo(map);
+            contextLayerGroup = L.layerGroup().addTo(map);
             buildingLayer = L.geoJSON(null, { style: { color: '#ef4444', weight: 1, fillOpacity: 0.2 }, interactive: false }).addTo(map);
             historicLayer = L.geoJSON(null, { style: { color: '#f59e0b', weight: 1, dashArray: '4,4', fillOpacity: 0.1 }, interactive: false }).addTo(map);
 
-            L.control.layers(null, { "Eligible Parcels": parcelLayerGroup, "Analysis Hexagons": hexLayerGroup }, { position: 'bottomright' }).addTo(map);
+            L.control.layers(null, { 
+                "Eligible Parcels": parcelLayerGroup, 
+                "Context Areas": contextLayerGroup,
+                "Analysis Hexagons": hexLayerGroup 
+            }, { position: 'bottomright' }).addTo(map);
 
             // Debounce event listeners
             sldLot.addEventListener('input', (e) => { document.getElementById('val-min-lot').innerText = Number(e.target.value).toLocaleString(); debouncedCalc(); });
             sldWidth.addEventListener('input', (e) => { document.getElementById('val-min-width').innerText = e.target.value; debouncedCalc(); });
             filterZoning.addEventListener('change', debouncedCalc);
-            filterContext.addEventListener('change', debouncedCalc);
+            chkUrban.addEventListener('change', debouncedCalc);
+            chkSuburban.addEventListener('change', debouncedCalc);
             
             chkBuildings.addEventListener('change', () => {
                 if(chkBuildings.checked && rawBuildingsGeoJSON) buildingLayer.addData(rawBuildingsGeoJSON);
@@ -205,21 +219,52 @@
                     }
                 }
 
-                setFeedback("Step 2/3: Fetching Regulatory Context...", true);
-                const [resBldg, resHist] = await Promise.all([
+                setFeedback("Step 2/3: Fetching Context & Regulatory Overlays...", true);
+                const [resBldg, resHist, resCtx] = await Promise.all([
                     fetch('data/eligible_buildings.geojson').catch(()=>null),
-                    fetch('data/historic.geojson').catch(()=>null)
+                    fetch('data/historic.geojson').catch(()=>null),
+                    fetch('data/context_areas.geojson').catch(()=>null)
                 ]);
+                
                 if(resBldg && resBldg.ok) rawBuildingsGeoJSON = await resBldg.json();
                 if(resHist && resHist.ok) rawHistoricGeoJSON = await resHist.json();
+                
+                // Parse Context Areas to prep for spatial intersection
+                if(resCtx && resCtx.ok) {
+                    const ctxData = await resCtx.json();
+                    L.geoJSON(ctxData, { style: { color: '#2dd4bf', weight: 1, fillOpacity: 0.05, dashArray: '5,5' }, interactive: false }).addTo(contextLayerGroup);
+                    
+                    parsedContextAreas = ctxData.features.map(f => {
+                        const propsStr = JSON.stringify(f.properties || {}).toLowerCase();
+                        let type = 'Unknown';
+                        if (propsStr.includes('suburban')) type = 'Suburban';
+                        else if (propsStr.includes('urban')) type = 'Urban';
+                        return { poly: f, type: type };
+                    });
+                }
 
-                setFeedback("Step 3/3: Importing Parcel Geometry...", true);
+                setFeedback("Step 3/3: Importing & Spatially Tagging Parcels...", true);
                 for(let i=1; i<=5; i++) {
                     const res = await fetch(`data/eligible_parcels_${i}.geojson`).catch(()=>null);
                     if(res && res.ok) {
                         const data = await res.json();
-                        // PERFORMANCE FIX 2: We no longer calculate turf.area() here. We just push the data so loading is fast.
-                        rawParcelsFeatures.push(...data.features);
+                        
+                        // Tag each parcel with its spatial Context during load to keep sliders fast
+                        data.features.forEach(f => {
+                            f.properties._calculatedContext = 'Unknown';
+                            if (parsedContextAreas.length > 0) {
+                                try {
+                                    let center = turf.center(f); // Find center point of parcel
+                                    for (let ctx of parsedContextAreas) {
+                                        if (turf.booleanPointInPolygon(center, ctx.poly)) {
+                                            f.properties._calculatedContext = ctx.type;
+                                            break;
+                                        }
+                                    }
+                                } catch(e) {}
+                            }
+                            rawParcelsFeatures.push(f);
+                        });
                     }
                 }
 
@@ -234,26 +279,19 @@
 
         function populateDynamicDropdowns() {
             let zones = new Set();
-            let contexts = new Set();
             
-            // Case-insensitive property scanner
             rawParcelsFeatures.forEach(f => {
                 if (!f.properties) return;
                 
-                for (let key in f.properties) {
-                    let k = key.toLowerCase();
-                    if (k === 'zoning') {
-                        if (f.properties[key] && f.properties[key].trim() !== '') zones.add(f.properties[key]);
-                    }
-                    if (k === 'context') {
-                        if (f.properties[key] && f.properties[key].trim() !== '') contexts.add(f.properties[key]);
-                    }
+                // Target District_Key directly, case-insensitive
+                let dKey = f.properties.District_Key || f.properties.DISTRICT_KEY || f.properties.district_key;
+                if (dKey && dKey.toString().trim() !== '') {
+                    zones.add(dKey.toString().trim());
                 }
             });
 
             // Populate Sorting Alphabetically
             Array.from(zones).sort().forEach(z => { filterZoning.add(new Option(z, z)); });
-            Array.from(contexts).sort().forEach(c => { filterContext.add(new Option(c, c)); });
         }
 
         function debouncedCalc() {
@@ -266,7 +304,8 @@
 
             const minArea = parseFloat(sldLot.value);
             const activeZoning = filterZoning.value;
-            const activeContext = filterContext.value;
+            const isUrbanChecked = chkUrban.checked;
+            const isSuburbanChecked = chkSuburban.checked;
             const checkBldg = chkBuildings.checked;
             const checkHist = chkHistoric.checked;
 
@@ -280,28 +319,24 @@
                 const props = f.properties;
                 if (!props) continue;
                 
-                // Case-insensitive retrieval for calculation
-                let pZoning = "Unknown", pContext = "Unknown";
-                for (let key in props) {
-                    if (key.toLowerCase() === 'zoning') pZoning = props[key];
-                    if (key.toLowerCase() === 'context') pContext = props[key];
-                }
+                // 1. Zoning Check
+                let pZoning = props.District_Key || props.DISTRICT_KEY || props.district_key || "Unknown";
+                if(activeZoning !== 'ALL' && pZoning.toString() !== activeZoning) continue;
 
-                // Filter 1: Dropdown Check
-                if(activeZoning !== 'ALL' && pZoning !== activeZoning) continue;
-                if(activeContext !== 'ALL' && pContext !== activeContext) continue;
+                // 2. Context Check (Using the pre-calculated tags from step 3)
+                let pContext = props._calculatedContext;
+                if (!isUrbanChecked && pContext === 'Urban') continue;
+                if (!isSuburbanChecked && pContext === 'Suburban') continue;
+                if (!isUrbanChecked && !isSuburbanChecked) continue; // Both unchecked = show none
 
-                // PERFORMANCE FIX 3: Lazy calculate area ONLY if needed, and cache it to the object.
+                // 3. Lazy Area Check
                 if (!props._cachedArea) {
                     props._cachedArea = turf.area(f) * 10.7639;
                 }
-                
                 let netArea = props._cachedArea;
-                
-                // Filter 2: Area Check
                 if (netArea < (minArea * 2)) continue;
 
-                // Filter 3: Historic Check
+                // 4. Historic Overlay Check
                 let isHistoric = false;
                 if (checkHist && rawHistoricGeoJSON) {
                     for(let block of rawHistoricGeoJSON.features) {
@@ -310,7 +345,7 @@
                 }
                 if(isHistoric) continue;
 
-                // Filter 4: Footprint Check
+                // 5. Building Footprint Deduction Check
                 if (checkBldg && rawBuildingsGeoJSON) {
                     for (let bldg of rawBuildingsGeoJSON.features) {
                         if (turf.booleanIntersects(f, bldg)) {
@@ -322,7 +357,7 @@
                     }
                 }
 
-                // Final Evaluation
+                // Final Pass
                 if (netArea >= (minArea * 2)) {
                     eligibleCount++;
                     yieldCount += 2;
@@ -330,11 +365,10 @@
                 }
             }
 
-            // Update UI Numbers
+            // Update UI
             statEligible.innerText = eligibleCount.toLocaleString();
             statYield.innerText = yieldCount.toLocaleString();
 
-            // Render matching parcels to map
             L.geoJSON(visibleFeatures, {
                 style: { color: '#0f766e', weight: 1, fillColor: '#2dd4bf', fillOpacity: 0.4 },
                 interactive: false
