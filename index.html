@@ -9,501 +9,293 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
     <style>
-        body { margin: 0; padding: 0; background-color: #0b0f19; }
+        body { margin: 0; padding: 0; background-color: #0b0f19; overflow: hidden; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #334155; }
         #map-canvas { height: 100%; width: 100%; min-height: 500px; }
     </style>
 </head>
-<body class="text-slate-100 font-sans antialiased selection:bg-teal-500 selection:text-slate-900 overflow-hidden">
+<body class="text-slate-100 font-sans antialiased selection:bg-teal-500">
 
-    <header class="bg-slate-900/90 backdrop-blur border-b border-slate-800 p-4 sticky top-0 z-50 flex flex-col md:flex-row justify-between items-center gap-4 shadow-xl">
+    <header class="bg-slate-900/90 border-b border-slate-800 p-4 sticky top-0 z-50 flex justify-between items-center shadow-xl">
         <div class="flex items-center gap-3">
-            <div class="h-8 w-8 bg-gradient-to-br from-teal-400 to-cyan-500 rounded-lg flex items-center justify-center shadow-lg shadow-teal-500/20">
+            <div class="h-8 w-8 bg-gradient-to-br from-teal-400 to-cyan-500 rounded-lg flex items-center justify-center">
                 <span class="text-slate-900 font-black text-sm">📐</span>
             </div>
             <div>
-                <h1 class="text-md font-bold tracking-wider text-slate-100 uppercase">Urban Lot Splitter</h1>
-                <p class="text-[10px] text-teal-400 tracking-widest font-mono uppercase">Geospatial Capacity Simulation Engine</p>
+                <h1 class="text-md font-bold text-slate-100 uppercase tracking-wider">Urban Lot Splitter</h1>
             </div>
         </div>
-        
-        <div class="flex gap-4 items-center">
-            <div class="bg-slate-950/80 border border-slate-800 rounded-xl px-5 py-2 flex flex-col items-end shadow-inner">
-                <span class="text-[9px] uppercase tracking-widest text-slate-400 font-mono">Eligible Parcels</span>
-                <span id="stat-eligible-count" class="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-cyan-400 font-mono">0</span>
+        <div class="flex gap-4">
+            <div class="bg-slate-950/80 border border-slate-800 rounded-xl px-5 py-2 text-right">
+                <span class="text-[9px] uppercase tracking-widest text-slate-400 block">Eligible Parcels</span>
+                <span id="stat-eligible-count" class="text-xl font-bold text-teal-400 font-mono">0</span>
             </div>
-            <div class="bg-slate-950/80 border border-slate-800 rounded-xl px-5 py-2 flex flex-col items-end shadow-inner">
-                <span class="text-[9px] uppercase tracking-widest text-slate-400 font-mono">Est. Housing Yield</span>
-                <span id="stat-housing-yield" class="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400 font-mono">0</span>
+            <div class="bg-slate-950/80 border border-slate-800 rounded-xl px-5 py-2 text-right">
+                <span class="text-[9px] uppercase tracking-widest text-slate-400 block">Est. Housing Yield</span>
+                <span id="stat-housing-yield" class="text-xl font-bold text-emerald-400 font-mono">0</span>
             </div>
         </div>
     </header>
 
-    <main class="grid grid-cols-1 xl:grid-cols-12 gap-0 h-[calc(100vh-73px)]">
+    <main class="grid grid-cols-1 md:grid-cols-12 h-[calc(100vh-73px)]">
         
-        <section class="xl:col-span-4 bg-slate-900 border-r border-slate-800 flex flex-col h-full overflow-y-auto custom-scrollbar">
+        <section class="md:col-span-4 bg-slate-900 border-r border-slate-800 flex flex-col h-full overflow-y-auto custom-scrollbar p-5">
             
-            <div class="p-5 border-b border-slate-800/60 bg-gradient-to-b from-slate-950/40 to-transparent">
-                <h2 class="text-xs font-bold text-teal-400 tracking-widest uppercase mb-2 font-mono">// Project Framework</h2>
-                <p class="text-xs text-slate-300 leading-relaxed mb-2">
-                    An <strong class="text-slate-100">Urban Lot Split</strong> allows single-family residential parcels to be subdivided into two distinct plots without requiring complex, multi-month public hearings. 
-                </p>
-                <p class="text-xs text-slate-400 leading-relaxed">
-                    By allowing these adjustments "by-right," cities can rapidly unlock missing middle housing—such as duplexes and backyard cottages—increasing infill housing supply within existing neighborhoods while utilizing established municipal utility lines.
-                </p>
+            <h3 class="text-xs font-bold text-teal-400 tracking-widest uppercase mb-4 mt-2">1. Dimensional Constraints</h3>
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6">
+                <div class="flex justify-between text-xs mb-2 font-mono">
+                    <span class="text-slate-400">Min Parcel Size (sq ft)</span>
+                    <span id="val-min-lot" class="text-teal-400 font-bold">2,500</span>
+                </div>
+                <input type="range" id="param-min-lot" min="1000" max="6000" step="250" value="2500" class="w-full mb-4 accent-teal-400 cursor-pointer">
+                
+                <div class="flex justify-between text-xs mb-2 font-mono">
+                    <span class="text-slate-400">Min Lot Width (ft)</span>
+                    <span id="val-min-width" class="text-teal-400 font-bold">25</span>
+                </div>
+                <input type="range" id="param-min-width" min="10" max="100" step="5" value="25" class="w-full accent-teal-400 cursor-pointer">
             </div>
 
-            <div class="p-5 flex flex-col gap-6">
+            <h3 class="text-xs font-bold text-teal-400 tracking-widest uppercase mb-4">2. Categorical Scopes</h3>
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6 space-y-4">
                 <div>
-                    <h3 class="text-xs font-bold text-slate-400 tracking-wider uppercase mb-3 flex items-center gap-2 font-mono">
-                        <span class="h-1.5 w-1.5 rounded-full bg-teal-400 animate-pulse"></span> 1. Dimensional Constraints
-                    </h3>
-                    <div class="space-y-4 bg-slate-950/60 p-4 rounded-xl border border-slate-800 shadow-inner">
-                        <div>
-                            <div class="flex justify-between text-xs mb-1 font-mono">
-                                <span class="text-slate-400">Min Parcel Size (sq ft)</span>
-                                <span id="val-min-lot" class="text-teal-400 font-bold">2,500</span>
-                            </div>
-                            <input type="range" id="param-min-lot" min="1000" max="6000" step="250" value="2500" class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400">
-                        </div>
-                        <div>
-                            <div class="flex justify-between text-xs mb-1 font-mono">
-                                <span class="text-slate-400">Min Lot Width (ft)</span>
-                                <span id="val-min-width" class="text-teal-400 font-bold">25</span>
-                            </div>
-                            <input type="range" id="param-min-width" min="15" max="60" step="5" value="25" class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-400">
-                        </div>
-                    </div>
+                    <label class="text-[10px] text-slate-400 uppercase tracking-widest block mb-1">Zoning Filter</label>
+                    <select id="filter-zoning" class="w-full bg-slate-800 border border-slate-700 rounded text-xs p-2 text-slate-200 outline-none">
+                        <option value="ALL">All Zoning</option>
+                    </select>
                 </div>
+                <div>
+                    <label class="text-[10px] text-slate-400 uppercase tracking-widest block mb-1">Context</label>
+                    <select id="filter-context" class="w-full bg-slate-800 border border-slate-700 rounded text-xs p-2 text-slate-200 outline-none">
+                        <option value="ALL">All Context</option>
+                    </select>
+                </div>
+            </div>
 
-                <div>
-                    <h3 class="text-xs font-bold text-slate-400 tracking-wider uppercase mb-3 flex items-center gap-2 font-mono">
-                        <span class="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-pulse"></span> 2. Categorical Scopes
-                    </h3>
-                    <div class="space-y-4 bg-slate-950/60 p-4 rounded-xl border border-slate-800 shadow-inner">
-                        <div>
-                            <label for="filter-zoning" class="block text-[11px] font-mono text-slate-400 uppercase tracking-wider mb-1.5">Permitted Zoning Districts</label>
-                            <select id="filter-zoning" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500 transition-colors cursor-pointer">
-                                <option value="ALL">Show All Districts</option>
-                                <option value="R-1">R-1</option>
-                                <option value="R-2">R-2</option>
-                                <option value="R-3">R-3</option>
-                                <option value="R-4">R-4</option>
-                                <option value="A-2">A-2</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="filter-context" class="block text-[11px] font-mono text-slate-400 uppercase tracking-wider mb-1.5">Geographic Typology Context</label>
-                            <select id="filter-context" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500 transition-colors cursor-pointer">
-                                <option value="ALL">Show All Typologies</option>
-                                <option value="Urban Core">Urban Core</option>
-                                <option value="Suburban Edge">Suburban Edge</option>
-                                <option value="Historic Buffer">Historic Buffer</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <div>
-                    <h3 class="text-xs font-bold text-slate-400 tracking-wider uppercase mb-3 flex items-center gap-2 font-mono">
-                        <span class="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span> 3. Constraints & Intersections
-                    </h3>
-                    <div class="bg-slate-950/60 p-4 rounded-xl border border-slate-800 shadow-inner space-y-4">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <label for="param-toggle-footprints" class="text-xs font-semibold text-slate-300 block cursor-pointer">Subtract Active Footprints</label>
-                                <span class="text-[10px] text-slate-500 font-mono">Bldg area deduction</span>
-                            </div>
-                            <input type="checkbox" id="param-toggle-footprints" checked class="w-4 h-4 text-teal-500 bg-slate-900 border-slate-700 rounded focus:ring-teal-500 focus:ring-2">
-                        </div>
-                        <div class="flex items-center justify-between pt-3 border-t border-slate-800/50">
-                            <div>
-                                <label for="param-toggle-historic" class="text-xs font-semibold text-amber-400 block cursor-pointer">Prohibit Historic Districts</label>
-                                <span class="text-[10px] text-slate-500 font-mono">Regulatory exclusion filter</span>
-                            </div>
-                            <input type="checkbox" id="param-toggle-historic" checked class="w-4 h-4 text-amber-500 bg-slate-900 border-slate-700 rounded focus:ring-amber-500 focus:ring-2">
-                        </div>
-                    </div>
-                </div>
+            <h3 class="text-xs font-bold text-teal-400 tracking-widest uppercase mb-4">3. Constraints & Intersections</h3>
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-4">
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" id="param-toggle-footprints" class="w-4 h-4 accent-red-500">
+                    <span class="text-xs text-slate-300">Bldg area deduction <span class="text-[9px] text-slate-500">(Calculates Slower)</span></span>
+                </label>
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" id="param-toggle-historic" class="w-4 h-4 accent-amber-500">
+                    <span class="text-xs text-slate-300">Exclude Historic Zones</span>
+                </label>
             </div>
         </section>
-        
-        <section class="xl:col-span-8 flex flex-col h-full relative">
-            
-            <div class="flex-grow relative border-b border-slate-800">
-                <div id="map-canvas"></div>
-                
-                <div class="absolute top-4 left-4 z-[1000] w-72 bg-slate-900/95 backdrop-blur border border-slate-800 p-3 rounded-xl shadow-2xl">
-                    <label for="search-address" class="block text-[10px] uppercase font-mono tracking-wider text-teal-400 mb-1">// Site Verification Engine</label>
-                    <div class="relative">
-                        <input type="text" id="search-address" placeholder="Search by Address..." class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500">
-                        <div id="search-results-dropdown" class="absolute w-full mt-1 max-h-40 overflow-y-auto bg-slate-900 border border-slate-800 rounded-lg shadow-xl hidden text-xs font-mono z-[1001] custom-scrollbar"></div>
-                    </div>
-                </div>
-            </div>
 
-            <div class="h-64 bg-slate-950 p-5 overflow-y-auto custom-scrollbar flex flex-col gap-3 border-l border-slate-800 shrink-0">
-                <h3 class="text-xs uppercase font-mono tracking-widest text-slate-400 border-b border-slate-800 pb-2 flex justify-between items-center">
-                    <span>🔬 Site Feasibility Diagnostics Output Canvas</span>
-                    <span class="text-[10px] text-slate-500 font-normal normal-case hidden md:block">Select an element on map to view</span>
-                </h3>
-                <div id="canvas-feedback" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-400 font-mono h-full items-center">
-                    <div class="md:col-span-3 text-center text-slate-500 italic">
-                        Initialize architectural site inspection by using the address search locator or selecting a parcel polygon inside the map canvas frame.
-                    </div>
-                </div>
+        <section class="md:col-span-8 flex flex-col h-full relative">
+            <div class="flex-grow relative border-b border-slate-800"><div id="map-canvas"></div></div>
+            <div id="canvas-feedback" class="h-24 bg-slate-950 p-4 overflow-y-auto text-xs text-slate-400 font-mono flex items-center justify-center border-l border-slate-800">
+                Awaiting Engine Mount...
             </div>
         </section>
     </main>
 
-   <script>
-// App Memory State Space Matrix
-let map;
-let parcelLayer, buildingLayer, historicLayer;
-let selectedParcelFeature = null;
+    <script>
+        // Data & Maps
+        let map;
+        let parcelLayerGroup, hexLayerGroup, buildingLayer, historicLayer;
+        let rawParcelsFeatures = [];
+        let rawBuildingsGeoJSON = null;
+        let rawHistoricGeoJSON = null;
+        
+        // UI Nodes
+        const feedbackLog = document.getElementById('canvas-feedback');
+        const statEligible = document.getElementById('stat-eligible-count');
+        const statYield = document.getElementById('stat-housing-yield');
+        const sldLot = document.getElementById('param-min-lot');
+        const sldWidth = document.getElementById('param-min-width');
+        const filterZoning = document.getElementById('filter-zoning');
+        const filterContext = document.getElementById('filter-context');
+        const chkBuildings = document.getElementById('param-toggle-footprints');
+        const chkHistoric = document.getElementById('param-toggle-historic');
 
-// Structured GeoJSON Layer Catalogs
-// Initialized as a blank FeatureCollection to hold the combined split files
-let rawParcelsGeoJSON = { type: "FeatureCollection", features: [] }; 
-let rawBuildingsGeoJSON = null;
-let rawHistoricGeoJSON = null;
-let hexGridLayerGroup; // Added to hold the 5 hex files
+        let calcTimeout; // For debouncing calculations
 
-// UI Node Element Hook Selectors
-const sliderMinLot = document.getElementById('param-min-lot');
-const sliderMinWidth = document.getElementById('param-min-width');
-const toggleFootprints = document.getElementById('param-toggle-footprints');
-const toggleHistoric = document.getElementById('param-toggle-historic');
-const filterZoning = document.getElementById('filter-zoning');
-const filterContext = document.getElementById('filter-context');
-const searchAddress = document.getElementById('search-address');
-const searchDropdown = document.getElementById('search-results-dropdown');
+        function initMap() {
+            map = L.map('map-canvas', { center: [31.7619, -106.4850], zoom: 12, zoomControl: false });
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            L.control.zoom({ position: 'topright' }).addTo(map);
 
-const lblMinLot = document.getElementById('val-min-lot');
-const lblMinWidth = document.getElementById('val-min-width');
-const countEligible = document.getElementById('stat-eligible-count');
-const countHousing = document.getElementById('stat-housing-yield');
-const feedbackLog = document.getElementById('canvas-feedback');
+            // Setup Layers
+            parcelLayerGroup = L.layerGroup().addTo(map);
+            hexLayerGroup = L.layerGroup().addTo(map);
+            buildingLayer = L.geoJSON(null, { style: { color: '#ef4444', weight: 1, fillOpacity: 0.2 }, interactive: false }).addTo(map);
+            historicLayer = L.geoJSON(null, { style: { color: '#f59e0b', weight: 1, dashArray: '4,4', fillOpacity: 0.1 }, interactive: false }).addTo(map);
 
-function initDashboard() {
-    // Initialize Map
-    map = L.map('map-canvas', { center: [31.7619, -106.4850], zoom: 15, zoomControl: false });
+            L.control.layers(null, { "Parcels": parcelLayerGroup, "Hexagons": hexLayerGroup }, { position: 'bottomright' }).addTo(map);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; CARTO'
-    }).addTo(map);
-
-    L.control.zoom({ position: 'topright' }).addTo(map);
-
-    // Setup Layers
-    parcelLayer = L.geoJSON(null, { style: getParcelSymbology, onEachFeature: registerFeatureEvents }).addTo(map);
-    
-    buildingLayer = L.geoJSON(null, {
-        style: { color: '#ef4444', weight: 0.8, fillColor: '#f87171', fillOpacity: 0.4, interactive: false }
-    }).addTo(map);
-
-    historicLayer = L.geoJSON(null, {
-        style: { color: '#f59e0b', weight: 1.5, fillColor: '#d97706', fillOpacity: 0.1, dashArray: '5, 5', interactive: false }
-    }).addTo(map);
-
-    // Setup Layer Group for Hexagons
-    hexGridLayerGroup = L.layerGroup().addTo(map);
-
-    // Add Layer Control toggles to the map
-    L.control.layers(null, {
-        "Eligible Parcels": parcelLayer,
-        "Hexagon Grid": hexGridLayerGroup
-    }, { position: 'bottomright' }).addTo(map);
-
-    // Bind Events
-    sliderMinLot.addEventListener('input', (e) => {
-        lblMinLot.innerText = Number(e.target.value).toLocaleString();
-        calculateLiveYields();
-    });
-    sliderMinWidth.addEventListener('input', (e) => {
-        lblMinWidth.innerText = e.target.value;
-        calculateLiveYields();
-    });
-    filterZoning.addEventListener('change', calculateLiveYields);
-    filterContext.addEventListener('change', calculateLiveYields);
-
-    toggleFootprints.addEventListener('change', () => {
-        if (toggleFootprints.checked && rawBuildingsGeoJSON) buildingLayer.addData(rawBuildingsGeoJSON);
-        else buildingLayer.clearLayers();
-        calculateLiveYields();
-    });
-
-    toggleHistoric.addEventListener('change', () => {
-        if (toggleHistoric.checked && rawHistoricGeoJSON) historicLayer.addData(rawHistoricGeoJSON);
-        else historicLayer.clearLayers();
-        calculateLiveYields();
-    });
-
-    searchAddress.addEventListener('input', queryAddressMatrix);
-
-    loadLocalSpatialAssets();
-}
-
-async function loadLocalSpatialAssets() {
-    setLoadingState("Mounting Local Geospatial Vectors...");
-    try {
-        // 1. Fetch static background layers
-        const [resBuildings, resHistoric] = await Promise.all([
-            fetch('data/eligible_buildings.geojson').catch(() => null),
-            fetch('data/historic.geojson').catch(() => null)
-        ]);
-
-        if (resBuildings && resBuildings.ok) rawBuildingsGeoJSON = await resBuildings.json();
-        if (resHistoric && resHistoric.ok) rawHistoricGeoJSON = await resHistoric.json();
-
-        if (rawBuildingsGeoJSON && toggleFootprints.checked) buildingLayer.addData(rawBuildingsGeoJSON);
-        if (rawHistoricGeoJSON && toggleHistoric.checked) historicLayer.addData(rawHistoricGeoJSON);
-
-        // 2. Fetch split eligible parcels (Parts 1-5)
-        for (let i = 1; i <= 5; i++) {
-            const res = await fetch(`data/eligible_parcels_${i}.geojson`).catch(() => null);
-            if (res && res.ok) {
-                const data = await res.json();
-                // Push data to master array for Turf.js math
-                rawParcelsGeoJSON.features.push(...data.features); 
-                // Add data to map layer
-                parcelLayer.addData(data); 
-            }
-        }
-
-        // 3. Fetch split El Paso hexagons (Parts 1-5)
-        for (let i = 1; i <= 5; i++) {
-            const res = await fetch(`data/el_paso_macro_hexagons_${i}.geojson`).catch(() => null);
-            if (res && res.ok) {
-                const data = await res.json();
-                L.geoJSON(data, { 
-                    style: { color: '#8b5cf6', weight: 1, fillOpacity: 0.1, interactive: false } 
-                }).addTo(hexGridLayerGroup);
-            }
-        }
-
-        // Snap map to parcel bounds
-        if (rawParcelsGeoJSON.features.length > 0) {
-            map.fitBounds(parcelLayer.getBounds());
-        }
-
-        // Trigger math
-        calculateLiveYields();
-
-        feedbackLog.innerHTML = `<div class="md:col-span-3 text-center text-slate-500 italic">Initialize architectural site inspection by using the address search locator or selecting a parcel polygon inside the map canvas frame.</div>`;
-
-    } catch (err) {
-        setLoadingState(`Ingest Exception Encountered: ${err.message}.`);
-        console.error(err);
-    }
-}
-
-function getParcelSymbology(feature) {
-    return { color: '#1e293b', weight: 1, fillColor: '#0f766e', fillOpacity: 0.35 };
-}
-
-function registerFeatureEvents(feature, layer) {
-    layer.on({
-        click: (e) => { triggerMicroSiteInspection(feature, e.target); },
-        mouseover: (e) => {
-            if(selectedParcelFeature !== feature) {
-                e.target.setStyle({ fillOpacity: 0.6, color: '#38bdf8', weight: 1.5 });
-            }
-        },
-        mouseout: (e) => {
-            if(selectedParcelFeature !== feature) {
-                parcelLayer.resetStyle(e.target);
-            }
-        }
-    });
-}
-
-function calculateLiveYields() {
-    if (!rawParcelsGeoJSON || rawParcelsGeoJSON.features.length === 0) return;
-
-    const minAreaSqFt = parseFloat(sliderMinLot.value);
-    const zoningSelection = filterZoning.value;
-    const contextSelection = filterContext.value;
-    const footprintsActive = toggleFootprints.checked;
-    const historicProhibited = toggleHistoric.checked;
-
-    let eligibleLotsCounter = 0;
-    let housingUnitsAccumulator = 0;
-
-    rawParcelsGeoJSON.features.forEach(parcel => {
-        const props = parcel.properties || {};
-
-        const parcelZoning = props.zoning || props.ZONING || "Unknown";
-        if (zoningSelection !== "ALL" && parcelZoning !== zoningSelection) {
-            parcel.isFilteredOut = true;
-            return;
-        }
-
-        const parcelContext = props.context || props.Context || props.CONTEXT || "Unknown";
-        if (contextSelection !== "ALL" && parcelContext !== contextSelection) {
-            parcel.isFilteredOut = true;
-            return;
-        }
-
-        parcel.isFilteredOut = false;
-
-        let isHistoricDisqualified = false;
-        if (historicProhibited && rawHistoricGeoJSON) {
-            for (let block of rawHistoricGeoJSON.features) {
-                if (turf.booleanIntersects(parcel, block)) {
-                    isHistoricDisqualified = true;
-                    break;
-                }
-            }
-        }
-
-        if (isHistoricDisqualified) {
-             parcel.isFilteredOut = true;
-             return;
-        }
-
-        let parcelResidualArea = turf.area(parcel) * 10.7639;
-
-        if (footprintsActive && rawBuildingsGeoJSON) {
-            rawBuildingsGeoJSON.features.forEach(building => {
-                if (turf.booleanIntersects(parcel, building)) {
-                    try {
-                        const overlapClip = turf.intersection(turf.featureCollection([parcel, building]));
-                        if (overlapClip) {
-                            parcelResidualArea -= (turf.area(overlapClip) * 10.7639);
-                        }
-                    } catch (err) {}
-                }
+            // Bind Events using Debounce (Prevents UI Freezing while dragging)
+            sldLot.addEventListener('input', (e) => { document.getElementById('val-min-lot').innerText = Number(e.target.value).toLocaleString(); debouncedCalc(); });
+            sldWidth.addEventListener('input', (e) => { document.getElementById('val-min-width').innerText = e.target.value; debouncedCalc(); });
+            filterZoning.addEventListener('change', debouncedCalc);
+            filterContext.addEventListener('change', debouncedCalc);
+            
+            chkBuildings.addEventListener('change', () => {
+                if(chkBuildings.checked && rawBuildingsGeoJSON) buildingLayer.addData(rawBuildingsGeoJSON);
+                else buildingLayer.clearLayers();
+                setFeedback("Re-processing footprint intersections...");
+                debouncedCalc();
             });
+            chkHistoric.addEventListener('change', () => {
+                if(chkHistoric.checked && rawHistoricGeoJSON) historicLayer.addData(rawHistoricGeoJSON);
+                else historicLayer.clearLayers();
+                debouncedCalc();
+            });
+
+            executeLoadingSequence();
         }
 
-        if (parcelResidualArea >= (minAreaSqFt * 2)) {
-            eligibleLotsCounter++;
-            housingUnitsAccumulator += 2;
-        } else {
-             parcel.isFilteredOut = true;
+        function setFeedback(msg, isError = false) {
+            const color = isError ? 'text-rose-400' : 'text-teal-400';
+            feedbackLog.innerHTML = `<span class="${color} animate-pulse">${msg}</span>`;
         }
-    });
 
-    countEligible.innerText = eligibleLotsCounter.toLocaleString();
-    countHousing.innerText = housingUnitsAccumulator.toLocaleString();
-
-    parcelLayer.setStyle(f => {
-        if(f.isFilteredOut) return { fillOpacity: 0, weight: 0, opacity: 0, interactive: false };
-        return getParcelSymbology(f);
-    });
-}
-
-function triggerMicroSiteInspection(feature, leafletLayer) {
-    selectedParcelFeature = feature;
-    parcelLayer.resetStyle();
-    
-    if(leafletLayer) {
-        leafletLayer.setStyle({ color: '#06b6d4', weight: 2.5, fillOpacity: 0.6, fillColor: '#0891b2' });
-        map.panTo(leafletLayer.getBounds().getCenter());
-    }
-
-    const props = feature.properties || {};
-    const grossArea = turf.area(feature) * 10.7639;
-    let netBuildableArea = grossArea;
-    let buildingIntersectionsCount = 0;
-    let insideHistoricZone = false;
-
-    if (rawHistoricGeoJSON) {
-        for (let block of rawHistoricGeoJSON.features) {
-            if (turf.booleanIntersects(feature, block)) {
-                insideHistoricZone = true;
-                break;
-            }
-        }
-    }
-
-    if (rawBuildingsGeoJSON) {
-        rawBuildingsGeoJSON.features.forEach(building => {
-            if (turf.booleanIntersects(feature, building)) {
-                buildingIntersectionsCount++;
-                try {
-                    const intersection = turf.intersection(turf.featureCollection([feature, building]));
-                    if (intersection) {
-                        netBuildableArea -= (turf.area(intersection) * 10.7639);
+        async function executeLoadingSequence() {
+            try {
+                // Step 1: Hexagons (Load Fast & Show Immediately)
+                setFeedback("Step 1/3: Rendering Regional Hexagons...");
+                for(let i=1; i<=5; i++) {
+                    const res = await fetch(`data/el_paso_macro_hexagons_${i}.geojson`).catch(()=>null);
+                    if(res && res.ok) {
+                        const data = await res.json();
+                        L.geoJSON(data, { style: { color: '#8b5cf6', weight: 1, fillOpacity: 0.05 }, interactive: false }).addTo(hexLayerGroup);
                     }
-                } catch (e) {}
+                }
+
+                // Step 2: Static Context (Buildings & Historic)
+                setFeedback("Step 2/3: Fetching Regulatory Context...");
+                const [resBldg, resHist] = await Promise.all([
+                    fetch('data/eligible_buildings.geojson').catch(()=>null),
+                    fetch('data/historic.geojson').catch(()=>null)
+                ]);
+                if(resBldg && resBldg.ok) rawBuildingsGeoJSON = await resBldg.json();
+                if(resHist && resHist.ok) rawHistoricGeoJSON = await resHist.json();
+
+                // Step 3: Parcels (Heavy Data)
+                setFeedback("Step 3/3: Importing Parcel Matrices. This may take a moment...");
+                for(let i=1; i<=5; i++) {
+                    const res = await fetch(`data/eligible_parcels_${i}.geojson`).catch(()=>null);
+                    if(res && res.ok) {
+                        const data = await res.json();
+                        // Add base area to feature properties NOW to save Turf calculation time later
+                        data.features.forEach(f => {
+                            f.properties._baseArea = turf.area(f) * 10.7639;
+                            rawParcelsFeatures.push(f);
+                        });
+                    }
+                }
+
+                // Auto-Populate the Dropdowns based on the loaded data
+                populateDynamicDropdowns();
+
+                setFeedback("Data Mount Complete. Running initial yield capacity matrix...");
+                calculateLiveYields(); // Final Run
+
+            } catch(e) {
+                setFeedback(`Error loading data: ${e.message}`, true);
             }
-        });
-    }
+        }
 
-    const activeMinAreaThreshold = parseFloat(sliderMinLot.value);
-    let validationStatusHTML = "";
-
-    if (insideHistoricZone && toggleHistoric.checked) {
-        validationStatusHTML = `<div class="bg-red-950/40 border border-red-800 text-red-400 p-3 rounded-lg text-center font-bold">🚫 POLICY DISQUALIFICATION<br><span class="text-[10px] font-normal font-sans text-slate-300">Parcels inside historic layers are barred under active settings.</span></div>`;
-    } else if (netBuildableArea >= (activeMinAreaThreshold * 2)) {
-        validationStatusHTML = `<div class="bg-emerald-950/40 border border-emerald-800 text-emerald-400 p-3 rounded-lg text-center font-bold">✅ SITE ELIGIBLE FOR SPLIT<br><span class="text-[10px] font-normal font-sans text-slate-300">Residual space sustains a subdivision layout cleanly.</span></div>`;
-    } else {
-        validationStatusHTML = `<div class="bg-rose-950/40 border border-rose-800 text-rose-400 p-3 rounded-lg text-center font-bold">❌ INSUFFICIENT NET AREA<br><span class="text-[10px] font-normal font-sans text-slate-300">Residual space drops below required limits</span></div>`;
-    }
-
-    feedbackLog.innerHTML = `
-        <div class="col-span-1">
-            <span class="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Gross Parcel Area</span>
-            <span class="text-lg font-bold text-slate-200">${Math.round(grossArea).toLocaleString()} <span class="text-xs text-slate-500 font-normal">sq ft</span></span>
-        </div>
-        <div class="col-span-1 border-l border-slate-800 pl-4">
-            <span class="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Net Buildable Area</span>
-            <span class="text-lg font-bold text-teal-400">${Math.round(netBuildableArea).toLocaleString()} <span class="text-xs text-slate-500 font-normal">sq ft</span></span>
-        </div>
-        <div class="col-span-1 border-l border-slate-800 pl-4">
-            <span class="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Structure Overlaps</span>
-            <span class="text-lg font-bold text-rose-400">${buildingIntersectionsCount} <span class="text-xs text-slate-500 font-normal">bldgs</span></span>
-        </div>
-        <div class="md:col-span-3 mt-2">${validationStatusHTML}</div>
-    `;
-}
-
-function queryAddressMatrix(e) {
-    const query = e.target.value.toLowerCase();
-    searchDropdown.innerHTML = '';
-    
-    if (query.length < 3) {
-        searchDropdown.classList.add('hidden');
-        return;
-    }
-
-    const matches = rawParcelsGeoJSON.features.filter(f => {
-        const addr = f.properties.address || f.properties.SITUS_ADDR || "";
-        return addr.toLowerCase().includes(query);
-    }).slice(0, 5); 
-
-    if (matches.length === 0) {
-        searchDropdown.innerHTML = `<div class="p-2 text-slate-500 italic text-center">No address matches located</div>`;
-    } else {
-        matches.forEach(item => {
-            const addrStr = item.properties.address || item.properties.SITUS_ADDR;
-            const node = document.createElement('div');
-            node.className = "p-2 hover:bg-slate-800 cursor-pointer border-b border-slate-800 last:border-0 text-slate-200 transition-colors";
-            node.innerText = addrStr;
-            node.addEventListener('click', () => {
-                searchAddress.value = addrStr;
-                searchDropdown.classList.add('hidden');
-                
-                parcelLayer.eachLayer(layer => {
-                    if (layer.feature === item) { triggerMicroSiteInspection(item, layer); }
-                });
+        function populateDynamicDropdowns() {
+            let zones = new Set();
+            let contexts = new Set();
+            
+            rawParcelsFeatures.forEach(f => {
+                const z = f.properties.zoning || f.properties.ZONING;
+                const c = f.properties.context || f.properties.CONTEXT;
+                if(z) zones.add(z);
+                if(c) contexts.add(c);
             });
-            searchDropdown.appendChild(node);
-        });
-    }
-    searchDropdown.classList.remove('hidden');
-}
 
-function setLoadingState(msg) {
-    feedbackLog.innerHTML = `<div class="md:col-span-3 text-center font-mono text-xs text-teal-400 animate-pulse mt-4">${msg}</div>`;
-}
+            zones.forEach(z => { filterZoning.add(new Option(z, z)); });
+            contexts.forEach(c => { filterContext.add(new Option(c, c)); });
+        }
 
-window.onload = initDashboard;
-</script>
+        // Debounce wrapper - Wait 400ms after user stops moving sliders before calculating
+        function debouncedCalc() {
+            clearTimeout(calcTimeout);
+            calcTimeout = setTimeout(calculateLiveYields, 400);
+        }
+
+        function calculateLiveYields() {
+            if(rawParcelsFeatures.length === 0) return;
+
+            const minArea = parseFloat(sldLot.value);
+            const activeZoning = filterZoning.value;
+            const activeContext = filterContext.value;
+            const checkBldg = chkBuildings.checked;
+            const checkHist = chkHistoric.checked;
+
+            let eligibleCount = 0;
+            let yieldCount = 0;
+            
+            // Clear current map parcels
+            parcelLayerGroup.clearLayers();
+            let visibleFeatures = [];
+
+            // "Fail-Fast" Calculation Loop
+            for (let f of rawParcelsFeatures) {
+                const props = f.properties;
+                
+                // 1. Skip instantly if wrong zoning/context (Lightning fast)
+                const z = props.zoning || props.ZONING || "Unknown";
+                const c = props.context || props.CONTEXT || "Unknown";
+                if(activeZoning !== 'ALL' && z !== activeZoning) continue;
+                if(activeContext !== 'ALL' && c !== activeContext) continue;
+
+                // 2. Skip instantly if base area is too small before even looking at geometry
+                let netArea = props._baseArea;
+                if (netArea < (minArea * 2)) continue;
+
+                // 3. Historic Check (Slower)
+                let isHistoric = false;
+                if (checkHist && rawHistoricGeoJSON) {
+                    for(let block of rawHistoricGeoJSON.features) {
+                        if(turf.booleanIntersects(f, block)) { isHistoric = true; break; }
+                    }
+                }
+                if(isHistoric) continue;
+
+                // 4. Footprint Check (Extremely Slow - only runs if parcel passed all above tests!)
+                if (checkBldg && rawBuildingsGeoJSON) {
+                    for (let bldg of rawBuildingsGeoJSON.features) {
+                        if (turf.booleanIntersects(f, bldg)) {
+                            try {
+                                const overlap = turf.intersection(turf.featureCollection([f, bldg]));
+                                if (overlap) netArea -= (turf.area(overlap) * 10.7639);
+                            } catch(err) {}
+                        }
+                    }
+                }
+
+                // Final check: Is it still big enough after buildings are subtracted?
+                if (netArea >= (minArea * 2)) {
+                    eligibleCount++;
+                    yieldCount += 2;
+                    visibleFeatures.push(f);
+                }
+            }
+
+            // Update UI
+            statEligible.innerText = eligibleCount.toLocaleString();
+            statYield.innerText = yieldCount.toLocaleString();
+
+            // Render ONLY eligible parcels (Huge performance boost)
+            L.geoJSON(visibleFeatures, {
+                style: { color: '#0f766e', weight: 1, fillColor: '#14b8a6', fillOpacity: 0.4 },
+                interactive: false
+            }).addTo(parcelLayerGroup);
+
+            feedbackLog.innerHTML = `<span class="text-slate-500 italic">Calculation complete. Displaying ${eligibleCount.toLocaleString()} eligible parcels.</span>`;
+        }
+
+        // Boot
+        window.onload = initMap;
+    </script>
 </body>
 </html>
