@@ -320,7 +320,7 @@
                 if (!props) continue;
                 
                 // 1. Zoning Check
-                let pZoning = props.District_Key || props.DISTRICT_KEY || props.district_key || "Unknown";
+                let pZoning = props.District_Key(String) || props.DISTRICT_KEY || props.district_key || "Unknown";
                 if(activeZoning !== 'ALL' && pZoning.toString() !== activeZoning) continue;
 
                 // 2. Context Check (Using the pre-calculated tags from step 3)
