@@ -8,15 +8,35 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <style>
-        body { margin: 0; padding: 0; background-color: #0b0f19; overflow: hidden; }
+        body { 
+            margin: 0; 
+            padding: 0; 
+            background-color: #0b0f19; 
+            overflow: hidden; 
+            font-family: 'Space Grotesk', sans-serif; /* Applied new tech font */
+        }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
-        #map-canvas { height: 100%; width: 100%; min-height: 500px; }
+        #map-canvas { height: 100%; width: 100%; min-height: 500px; background: #0b0f19; }
+        
+        /* Tooltip styling for modern feel */
+        .leaflet-tooltip {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            color: #38bdf8;
+            font-family: 'Space Grotesk', sans-serif;
+            border-radius: 4px;
+        }
     </style>
 </head>
-<body class="text-slate-100 font-sans antialiased selection:bg-teal-500">
+<body class="text-slate-100 antialiased selection:bg-teal-500 selection:text-slate-900">
 
     <header class="bg-slate-900/90 border-b border-slate-800 p-4 sticky top-0 z-50 flex justify-between items-center shadow-xl">
         <div class="flex items-center gap-3">
@@ -24,72 +44,88 @@
                 <span class="text-slate-900 font-black text-sm">📐</span>
             </div>
             <div>
-                <h1 class="text-md font-bold text-slate-100 uppercase tracking-wider">Urban Lot Splitter</h1>
+                <h1 class="text-lg font-bold text-slate-100 uppercase tracking-widest leading-none">Urban Lot Splitter</h1>
+                <span class="text-[10px] text-teal-400 tracking-widest uppercase">Capacity Simulation Engine</span>
             </div>
         </div>
         <div class="flex gap-4">
-            <div class="bg-slate-950/80 border border-slate-800 rounded-xl px-5 py-2 text-right">
+            <div class="bg-slate-950/80 border border-slate-800 rounded-xl px-5 py-2 text-right shadow-inner">
                 <span class="text-[9px] uppercase tracking-widest text-slate-400 block">Eligible Parcels</span>
-                <span id="stat-eligible-count" class="text-xl font-bold text-teal-400 font-mono">0</span>
+                <span id="stat-eligible-count" class="text-xl font-bold text-teal-400">0</span>
             </div>
-            <div class="bg-slate-950/80 border border-slate-800 rounded-xl px-5 py-2 text-right">
+            <div class="bg-slate-950/80 border border-slate-800 rounded-xl px-5 py-2 text-right shadow-inner">
                 <span class="text-[9px] uppercase tracking-widest text-slate-400 block">Est. Housing Yield</span>
-                <span id="stat-housing-yield" class="text-xl font-bold text-emerald-400 font-mono">0</span>
+                <span id="stat-housing-yield" class="text-xl font-bold text-emerald-400">0</span>
             </div>
         </div>
     </header>
 
-    <main class="grid grid-cols-1 md:grid-cols-12 h-[calc(100vh-73px)]">
+    <main class="grid grid-cols-1 md:grid-cols-12 h-[calc(100vh-77px)]">
         
         <section class="md:col-span-4 bg-slate-900 border-r border-slate-800 flex flex-col h-full overflow-y-auto custom-scrollbar p-5">
             
-            <h3 class="text-xs font-bold text-teal-400 tracking-widest uppercase mb-4 mt-2">1. Dimensional Constraints</h3>
-            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6">
-                <div class="flex justify-between text-xs mb-2 font-mono">
-                    <span class="text-slate-400">Min Parcel Size (sq ft)</span>
+            <div class="mb-6 bg-slate-950/50 p-4 rounded-xl border border-slate-800/50">
+                <h2 class="text-xs font-bold text-teal-400 tracking-widest uppercase mb-2">// Project Framework</h2>
+                <p class="text-[11px] text-slate-300 leading-relaxed">
+                    An <strong>Urban Lot Split</strong> allows single-family residential parcels to be subdivided into two distinct plots without requiring complex, multi-month public hearings. By allowing these adjustments "by-right," cities can rapidly unlock missing middle housing while utilizing established municipal utility lines.
+                </p>
+            </div>
+
+            <h3 class="text-xs font-bold text-slate-200 tracking-widest uppercase mb-3 flex items-center gap-2">
+                <span class="h-1.5 w-1.5 rounded-full bg-teal-400"></span> Dimensional Constraints
+            </h3>
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6 shadow-inner">
+                <div class="flex justify-between text-xs mb-2">
+                    <span class="text-slate-400 uppercase tracking-wider text-[10px]">Min Parcel Size (sq ft)</span>
                     <span id="val-min-lot" class="text-teal-400 font-bold">2,500</span>
                 </div>
                 <input type="range" id="param-min-lot" min="1000" max="6000" step="250" value="2500" class="w-full mb-4 accent-teal-400 cursor-pointer">
                 
-                <div class="flex justify-between text-xs mb-2 font-mono">
-                    <span class="text-slate-400">Min Lot Width (ft)</span>
+                <div class="flex justify-between text-xs mb-2">
+                    <span class="text-slate-400 uppercase tracking-wider text-[10px]">Min Lot Width (ft)</span>
                     <span id="val-min-width" class="text-teal-400 font-bold">25</span>
                 </div>
                 <input type="range" id="param-min-width" min="10" max="100" step="5" value="25" class="w-full accent-teal-400 cursor-pointer">
             </div>
 
-            <h3 class="text-xs font-bold text-teal-400 tracking-widest uppercase mb-4">2. Categorical Scopes</h3>
-            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6 space-y-4">
+            <h3 class="text-xs font-bold text-slate-200 tracking-widest uppercase mb-3 flex items-center gap-2">
+                <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span> Categorical Scopes
+            </h3>
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6 space-y-4 shadow-inner">
                 <div>
                     <label class="text-[10px] text-slate-400 uppercase tracking-widest block mb-1">Zoning Filter</label>
-                    <select id="filter-zoning" class="w-full bg-slate-800 border border-slate-700 rounded text-xs p-2 text-slate-200 outline-none">
+                    <select id="filter-zoning" class="w-full bg-slate-900 border border-slate-700 rounded text-xs p-2 text-slate-200 outline-none focus:border-teal-400 transition-colors cursor-pointer">
                         <option value="ALL">All Zoning</option>
                     </select>
                 </div>
                 <div>
-                    <label class="text-[10px] text-slate-400 uppercase tracking-widest block mb-1">Context</label>
-                    <select id="filter-context" class="w-full bg-slate-800 border border-slate-700 rounded text-xs p-2 text-slate-200 outline-none">
-                        <option value="ALL">All Context</option>
+                    <label class="text-[10px] text-slate-400 uppercase tracking-widest block mb-1">Context Matrix</label>
+                    <select id="filter-context" class="w-full bg-slate-900 border border-slate-700 rounded text-xs p-2 text-slate-200 outline-none focus:border-teal-400 transition-colors cursor-pointer">
+                        <option value="ALL">All Contexts</option>
                     </select>
                 </div>
             </div>
 
-            <h3 class="text-xs font-bold text-teal-400 tracking-widest uppercase mb-4">3. Constraints & Intersections</h3>
-            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-4">
-                <label class="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" id="param-toggle-footprints" class="w-4 h-4 accent-red-500">
-                    <span class="text-xs text-slate-300">Bldg area deduction <span class="text-[9px] text-slate-500">(Calculates Slower)</span></span>
+            <h3 class="text-xs font-bold text-slate-200 tracking-widest uppercase mb-3 flex items-center gap-2">
+                <span class="h-1.5 w-1.5 rounded-full bg-rose-400"></span> Intersections
+            </h3>
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-4 shadow-inner">
+                <label class="flex items-center gap-3 cursor-pointer group">
+                    <input type="checkbox" id="param-toggle-footprints" class="w-4 h-4 accent-rose-500 rounded border-slate-700">
+                    <span class="text-xs text-slate-300 group-hover:text-slate-100 transition-colors">Deduct Building Footprints <span class="text-[9px] text-slate-500 block">(Increases calculation time)</span></span>
                 </label>
-                <label class="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" id="param-toggle-historic" class="w-4 h-4 accent-amber-500">
-                    <span class="text-xs text-slate-300">Exclude Historic Zones</span>
+                <label class="flex items-center gap-3 cursor-pointer group">
+                    <input type="checkbox" id="param-toggle-historic" class="w-4 h-4 accent-amber-500 rounded border-slate-700">
+                    <span class="text-xs text-slate-300 group-hover:text-slate-100 transition-colors">Exclude Historic Districts</span>
                 </label>
             </div>
         </section>
 
         <section class="md:col-span-8 flex flex-col h-full relative">
-            <div class="flex-grow relative border-b border-slate-800"><div id="map-canvas"></div></div>
-            <div id="canvas-feedback" class="h-24 bg-slate-950 p-4 overflow-y-auto text-xs text-slate-400 font-mono flex items-center justify-center border-l border-slate-800">
+            <div class="flex-grow relative border-b border-slate-800">
+                <div id="map-canvas"></div>
+            </div>
+            <div id="canvas-feedback" class="h-16 bg-slate-950 p-4 overflow-y-auto text-xs text-slate-400 flex items-center justify-center border-l border-slate-800 shadow-inner">
                 Awaiting Engine Mount...
             </div>
         </section>
@@ -114,22 +150,25 @@
         const chkBuildings = document.getElementById('param-toggle-footprints');
         const chkHistoric = document.getElementById('param-toggle-historic');
 
-        let calcTimeout; // For debouncing calculations
+        let calcTimeout; 
 
         function initMap() {
-            map = L.map('map-canvas', { center: [31.7619, -106.4850], zoom: 12, zoomControl: false });
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            // PERFORMANCE FIX 1: preferCanvas: true tells Leaflet to use HTML5 Canvas instead of heavy SVGs. Huge speed boost.
+            map = L.map('map-canvas', { center: [31.7619, -106.4850], zoom: 12, zoomControl: false, preferCanvas: true });
+            
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; CARTO'
+            }).addTo(map);
             L.control.zoom({ position: 'topright' }).addTo(map);
 
-            // Setup Layers
             parcelLayerGroup = L.layerGroup().addTo(map);
             hexLayerGroup = L.layerGroup().addTo(map);
             buildingLayer = L.geoJSON(null, { style: { color: '#ef4444', weight: 1, fillOpacity: 0.2 }, interactive: false }).addTo(map);
             historicLayer = L.geoJSON(null, { style: { color: '#f59e0b', weight: 1, dashArray: '4,4', fillOpacity: 0.1 }, interactive: false }).addTo(map);
 
-            L.control.layers(null, { "Parcels": parcelLayerGroup, "Hexagons": hexLayerGroup }, { position: 'bottomright' }).addTo(map);
+            L.control.layers(null, { "Eligible Parcels": parcelLayerGroup, "Analysis Hexagons": hexLayerGroup }, { position: 'bottomright' }).addTo(map);
 
-            // Bind Events using Debounce (Prevents UI Freezing while dragging)
+            // Debounce event listeners
             sldLot.addEventListener('input', (e) => { document.getElementById('val-min-lot').innerText = Number(e.target.value).toLocaleString(); debouncedCalc(); });
             sldWidth.addEventListener('input', (e) => { document.getElementById('val-min-width').innerText = e.target.value; debouncedCalc(); });
             filterZoning.addEventListener('change', debouncedCalc);
@@ -138,7 +177,7 @@
             chkBuildings.addEventListener('change', () => {
                 if(chkBuildings.checked && rawBuildingsGeoJSON) buildingLayer.addData(rawBuildingsGeoJSON);
                 else buildingLayer.clearLayers();
-                setFeedback("Re-processing footprint intersections...");
+                setFeedback("Re-processing footprint intersections...", true);
                 debouncedCalc();
             });
             chkHistoric.addEventListener('change', () => {
@@ -150,25 +189,23 @@
             executeLoadingSequence();
         }
 
-        function setFeedback(msg, isError = false) {
-            const color = isError ? 'text-rose-400' : 'text-teal-400';
-            feedbackLog.innerHTML = `<span class="${color} animate-pulse">${msg}</span>`;
+        function setFeedback(msg, isProcessing = false) {
+            const color = isProcessing ? 'text-cyan-400 animate-pulse' : 'text-slate-400';
+            feedbackLog.innerHTML = `<span class="${color}">${msg}</span>`;
         }
 
         async function executeLoadingSequence() {
             try {
-                // Step 1: Hexagons (Load Fast & Show Immediately)
-                setFeedback("Step 1/3: Rendering Regional Hexagons...");
+                setFeedback("Step 1/3: Mounting Regional Grid...", true);
                 for(let i=1; i<=5; i++) {
                     const res = await fetch(`data/el_paso_macro_hexagons_${i}.geojson`).catch(()=>null);
                     if(res && res.ok) {
                         const data = await res.json();
-                        L.geoJSON(data, { style: { color: '#8b5cf6', weight: 1, fillOpacity: 0.05 }, interactive: false }).addTo(hexLayerGroup);
+                        L.geoJSON(data, { style: { color: '#8b5cf6', weight: 0.5, fillOpacity: 0.05 }, interactive: false }).addTo(hexLayerGroup);
                     }
                 }
 
-                // Step 2: Static Context (Buildings & Historic)
-                setFeedback("Step 2/3: Fetching Regulatory Context...");
+                setFeedback("Step 2/3: Fetching Regulatory Context...", true);
                 const [resBldg, resHist] = await Promise.all([
                     fetch('data/eligible_buildings.geojson').catch(()=>null),
                     fetch('data/historic.geojson').catch(()=>null)
@@ -176,28 +213,22 @@
                 if(resBldg && resBldg.ok) rawBuildingsGeoJSON = await resBldg.json();
                 if(resHist && resHist.ok) rawHistoricGeoJSON = await resHist.json();
 
-                // Step 3: Parcels (Heavy Data)
-                setFeedback("Step 3/3: Importing Parcel Matrices. This may take a moment...");
+                setFeedback("Step 3/3: Importing Parcel Geometry...", true);
                 for(let i=1; i<=5; i++) {
                     const res = await fetch(`data/eligible_parcels_${i}.geojson`).catch(()=>null);
                     if(res && res.ok) {
                         const data = await res.json();
-                        // Add base area to feature properties NOW to save Turf calculation time later
-                        data.features.forEach(f => {
-                            f.properties._baseArea = turf.area(f) * 10.7639;
-                            rawParcelsFeatures.push(f);
-                        });
+                        // PERFORMANCE FIX 2: We no longer calculate turf.area() here. We just push the data so loading is fast.
+                        rawParcelsFeatures.push(...data.features);
                     }
                 }
 
-                // Auto-Populate the Dropdowns based on the loaded data
                 populateDynamicDropdowns();
-
-                setFeedback("Data Mount Complete. Running initial yield capacity matrix...");
-                calculateLiveYields(); // Final Run
+                setFeedback("Engine Mount Complete. Running spatial simulation...", true);
+                calculateLiveYields();
 
             } catch(e) {
-                setFeedback(`Error loading data: ${e.message}`, true);
+                setFeedback(`Error loading data: ${e.message}`);
             }
         }
 
@@ -205,21 +236,29 @@
             let zones = new Set();
             let contexts = new Set();
             
+            // Case-insensitive property scanner
             rawParcelsFeatures.forEach(f => {
-                const z = f.properties.zoning || f.properties.ZONING;
-                const c = f.properties.context || f.properties.CONTEXT;
-                if(z) zones.add(z);
-                if(c) contexts.add(c);
+                if (!f.properties) return;
+                
+                for (let key in f.properties) {
+                    let k = key.toLowerCase();
+                    if (k === 'zoning') {
+                        if (f.properties[key] && f.properties[key].trim() !== '') zones.add(f.properties[key]);
+                    }
+                    if (k === 'context') {
+                        if (f.properties[key] && f.properties[key].trim() !== '') contexts.add(f.properties[key]);
+                    }
+                }
             });
 
-            zones.forEach(z => { filterZoning.add(new Option(z, z)); });
-            contexts.forEach(c => { filterContext.add(new Option(c, c)); });
+            // Populate Sorting Alphabetically
+            Array.from(zones).sort().forEach(z => { filterZoning.add(new Option(z, z)); });
+            Array.from(contexts).sort().forEach(c => { filterContext.add(new Option(c, c)); });
         }
 
-        // Debounce wrapper - Wait 400ms after user stops moving sliders before calculating
         function debouncedCalc() {
             clearTimeout(calcTimeout);
-            calcTimeout = setTimeout(calculateLiveYields, 400);
+            calcTimeout = setTimeout(calculateLiveYields, 300);
         }
 
         function calculateLiveYields() {
@@ -234,25 +273,35 @@
             let eligibleCount = 0;
             let yieldCount = 0;
             
-            // Clear current map parcels
             parcelLayerGroup.clearLayers();
             let visibleFeatures = [];
 
-            // "Fail-Fast" Calculation Loop
             for (let f of rawParcelsFeatures) {
                 const props = f.properties;
+                if (!props) continue;
                 
-                // 1. Skip instantly if wrong zoning/context (Lightning fast)
-                const z = props.zoning || props.ZONING || "Unknown";
-                const c = props.context || props.CONTEXT || "Unknown";
-                if(activeZoning !== 'ALL' && z !== activeZoning) continue;
-                if(activeContext !== 'ALL' && c !== activeContext) continue;
+                // Case-insensitive retrieval for calculation
+                let pZoning = "Unknown", pContext = "Unknown";
+                for (let key in props) {
+                    if (key.toLowerCase() === 'zoning') pZoning = props[key];
+                    if (key.toLowerCase() === 'context') pContext = props[key];
+                }
 
-                // 2. Skip instantly if base area is too small before even looking at geometry
-                let netArea = props._baseArea;
+                // Filter 1: Dropdown Check
+                if(activeZoning !== 'ALL' && pZoning !== activeZoning) continue;
+                if(activeContext !== 'ALL' && pContext !== activeContext) continue;
+
+                // PERFORMANCE FIX 3: Lazy calculate area ONLY if needed, and cache it to the object.
+                if (!props._cachedArea) {
+                    props._cachedArea = turf.area(f) * 10.7639;
+                }
+                
+                let netArea = props._cachedArea;
+                
+                // Filter 2: Area Check
                 if (netArea < (minArea * 2)) continue;
 
-                // 3. Historic Check (Slower)
+                // Filter 3: Historic Check
                 let isHistoric = false;
                 if (checkHist && rawHistoricGeoJSON) {
                     for(let block of rawHistoricGeoJSON.features) {
@@ -261,7 +310,7 @@
                 }
                 if(isHistoric) continue;
 
-                // 4. Footprint Check (Extremely Slow - only runs if parcel passed all above tests!)
+                // Filter 4: Footprint Check
                 if (checkBldg && rawBuildingsGeoJSON) {
                     for (let bldg of rawBuildingsGeoJSON.features) {
                         if (turf.booleanIntersects(f, bldg)) {
@@ -273,7 +322,7 @@
                     }
                 }
 
-                // Final check: Is it still big enough after buildings are subtracted?
+                // Final Evaluation
                 if (netArea >= (minArea * 2)) {
                     eligibleCount++;
                     yieldCount += 2;
@@ -281,20 +330,19 @@
                 }
             }
 
-            // Update UI
+            // Update UI Numbers
             statEligible.innerText = eligibleCount.toLocaleString();
             statYield.innerText = yieldCount.toLocaleString();
 
-            // Render ONLY eligible parcels (Huge performance boost)
+            // Render matching parcels to map
             L.geoJSON(visibleFeatures, {
-                style: { color: '#0f766e', weight: 1, fillColor: '#14b8a6', fillOpacity: 0.4 },
+                style: { color: '#0f766e', weight: 1, fillColor: '#2dd4bf', fillOpacity: 0.4 },
                 interactive: false
             }).addTo(parcelLayerGroup);
 
-            feedbackLog.innerHTML = `<span class="text-slate-500 italic">Calculation complete. Displaying ${eligibleCount.toLocaleString()} eligible parcels.</span>`;
+            setFeedback(`SYSTEM IDLE — Simulating ${eligibleCount.toLocaleString()} eligible parcels.`);
         }
 
-        // Boot
         window.onload = initMap;
     </script>
 </body>
