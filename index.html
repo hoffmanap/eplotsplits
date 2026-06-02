@@ -48,11 +48,24 @@
     <main class="grid grid-cols-1 md:grid-cols-12 h-[calc(100vh-77px)]">
         
         <section class="md:col-span-4 bg-slate-900 border-r border-slate-800 flex flex-col h-full overflow-y-auto custom-scrollbar p-5">
+            
             <div class="mb-6 bg-slate-950/50 p-4 rounded-xl border border-slate-800/50">
                 <h2 class="text-xs font-bold text-teal-400 tracking-widest uppercase mb-2">// Project Framework</h2>
-                <p class="text-[11px] text-slate-300 leading-relaxed">
-                    An <strong>Urban Lot Split</strong> allows single-family residential parcels to be subdivided into two distinct plots without requiring complex, multi-month public hearings. By allowing these adjustments "by-right," cities can rapidly unlock missing middle housing while utilizing established municipal utility lines.
-                </p>
+                <div class="text-[11px] text-slate-300 leading-relaxed space-y-3">
+                    <p>
+                        An <strong>Urban Lot Split</strong> allows single-family residential parcels to be subdivided into two distinct plots without requiring complex, multi-month public hearings. By allowing these adjustments "by-right," cities can rapidly unlock missing middle housing while utilizing established municipal utility lines.
+                    </p>
+                    <p class="border-t border-slate-800 pt-3">
+                        <strong class="text-slate-200">Methodology & Assumptions:</strong><br>
+                        Our baseline workflow pre-screens parcels to identify those that currently meet or exceed the minimum lot size requirements for the zoning district in which they are located. 
+                    </p>
+                    <p>
+                        By adjusting the <strong>Dimensional Constraints</strong> (Min. Size & Width), you are applying <em>proposed standards</em> to the lot splits to visualize how many of these baseline parcels would remain compliant if those dimensions became municipal code requirements. 
+                    </p>
+                    <p>
+                        The <strong>Categorical Scopes</strong> and <strong>Intersections</strong> allow further scenario testing, demonstrating the impact on housing yield if lot splits were restricted by specific zoning districts, geographic contexts, or historic protections.
+                    </p>
+                </div>
             </div>
 
             <h3 class="text-xs font-bold text-slate-200 tracking-widest uppercase mb-3 flex items-center gap-2">
@@ -76,12 +89,17 @@
                 <span class="h-1.5 w-1.5 rounded-full bg-cyan-400"></span> Categorical Scopes
             </h3>
             <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-6 space-y-5 shadow-inner">
+                
                 <div>
-                    <label class="text-[10px] text-slate-400 uppercase tracking-widest block mb-2">Zoning Filter</label>
-                    <select id="filter-zoning" class="w-full bg-slate-900 border border-slate-700 rounded text-xs p-2 text-slate-200 outline-none focus:border-teal-400 transition-colors cursor-pointer">
-                        <option value="ALL">All Zoning Types</option>
-                    </select>
+                    <div class="flex justify-between items-end mb-2">
+                        <label class="text-[10px] text-slate-400 uppercase tracking-widest block">Zoning Filter</label>
+                        <button id="btn-toggle-zones" class="text-[9px] text-teal-400 hover:text-teal-300 underline tracking-wider transition-colors">Toggle All</button>
+                    </div>
+                    <div id="filter-zoning-container" class="w-full bg-slate-900 border border-slate-700 rounded p-3 text-slate-200 max-h-40 overflow-y-auto custom-scrollbar space-y-2">
+                        <div class="text-xs text-slate-500 italic">Scanning districts...</div>
+                    </div>
                 </div>
+
                 <div>
                     <label class="text-[10px] text-slate-400 uppercase tracking-widest block mb-2">Context Matrix</label>
                     <div class="flex gap-4">
@@ -126,12 +144,11 @@
         let map;
         let parcelLayerGroup, buildingLayer, historicLayer, contextLayerGroup;
         
-        // Master Data Storage
         let rawParcelsFeatures = [];
         let rawBuildingsGeoJSON = null;
         let rawHistoricGeoJSON = null;
         let parsedContextAreas = [];
-        let backgroundHexagons = []; // Hexagons kept in memory, removed from map visual
+        let backgroundHexagons = [];
         
         // UI Nodes
         const feedbackLog = document.getElementById('canvas-feedback');
@@ -139,7 +156,11 @@
         const statYield = document.getElementById('stat-housing-yield');
         const sldLot = document.getElementById('param-min-lot');
         const sldWidth = document.getElementById('param-min-width');
-        const filterZoning = document.getElementById('filter-zoning');
+        
+        // New Multi-Select Nodes
+        const containerZoning = document.getElementById('filter-zoning-container');
+        const btnToggleZones = document.getElementById('btn-toggle-zones');
+        
         const chkUrban = document.getElementById('filter-context-urban');
         const chkSuburban = document.getElementById('filter-context-suburban');
         const chkBuildings = document.getElementById('param-toggle-footprints');
@@ -147,8 +168,6 @@
 
         let calcTimeout; 
 
-        // --- HELPER: ROBUST PROPERTY FINDER ---
-        // Safely finds columns even if QGIS/ArcGIS truncated or modified the name
         function getFuzzyProperty(properties, searchTerms) {
             if (!properties) return undefined;
             for (let key in properties) {
@@ -181,7 +200,6 @@
             // Bind Event Listeners
             sldLot.addEventListener('input', (e) => { document.getElementById('val-min-lot').innerText = Number(e.target.value).toLocaleString(); debouncedCalc(); });
             sldWidth.addEventListener('input', (e) => { document.getElementById('val-min-width').innerText = e.target.value; debouncedCalc(); });
-            filterZoning.addEventListener('change', debouncedCalc);
             chkUrban.addEventListener('change', debouncedCalc);
             chkSuburban.addEventListener('change', debouncedCalc);
             
@@ -193,6 +211,16 @@
             chkHistoric.addEventListener('change', () => {
                 if(chkHistoric.checked && rawHistoricGeoJSON) historicLayer.addData(rawHistoricGeoJSON);
                 else historicLayer.clearLayers();
+                debouncedCalc();
+            });
+            
+            // Setup Toggle All Zones Button
+            btnToggleZones.addEventListener('click', () => {
+                const boxes = document.querySelectorAll('.zoning-checkbox');
+                if (boxes.length === 0) return;
+                // If all are currently checked, uncheck all. Otherwise, check all.
+                const allChecked = Array.from(boxes).every(b => b.checked);
+                boxes.forEach(b => b.checked = !allChecked);
                 debouncedCalc();
             });
 
@@ -222,7 +250,6 @@
                     fetch('data/context_areas.geojson').catch(()=>null)
                 ]);
                 
-                // Building Footprints - CRASH FIX: Pre-calculate flat area and bounds
                 if(resBldg && resBldg.ok) {
                     rawBuildingsGeoJSON = await resBldg.json();
                     rawBuildingsGeoJSON.features.forEach(f => {
@@ -232,7 +259,6 @@
                     });
                 }
                 
-                // Historic Districts
                 if(resHist && resHist.ok) {
                     rawHistoricGeoJSON = await resHist.json();
                     rawHistoricGeoJSON.features.forEach(f => {
@@ -241,7 +267,6 @@
                     });
                 }
                 
-                // Context Areas
                 if(resCtx && resCtx.ok) {
                     const ctxData = await resCtx.json();
                     L.geoJSON(ctxData, { style: { color: '#2dd4bf', weight: 1, fillOpacity: 0.05, dashArray: '5,5' }, interactive: false }).addTo(contextLayerGroup);
@@ -286,16 +311,37 @@
             }
         }
 
+        // --- UPDATED MULTI-SELECT POPULATION ---
         function populateDynamicDropdowns() {
             let zones = new Set();
             rawParcelsFeatures.forEach(f => {
-                // Robust Zoning Scan
                 let dKey = getFuzzyProperty(f.properties, ["District_Key", "Zoning"]);
                 if (dKey && dKey.toString().trim() !== '') {
                     zones.add(dKey.toString().trim());
                 }
             });
-            Array.from(zones).sort().forEach(z => { filterZoning.add(new Option(z, z)); });
+            
+            containerZoning.innerHTML = ''; // Clear loading text
+            
+            Array.from(zones).sort().forEach(z => { 
+                const wrapper = document.createElement('label');
+                wrapper.className = "flex items-center gap-3 cursor-pointer group mb-2 last:mb-0";
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = z;
+                checkbox.checked = true; // Default to all checked
+                checkbox.className = "zoning-checkbox w-4 h-4 accent-cyan-400 rounded border-slate-700 cursor-pointer shrink-0";
+                checkbox.addEventListener('change', debouncedCalc);
+                
+                const labelText = document.createElement('span');
+                labelText.className = "text-xs text-slate-300 group-hover:text-slate-100 transition-colors";
+                labelText.innerText = z;
+                
+                wrapper.appendChild(checkbox);
+                wrapper.appendChild(labelText);
+                containerZoning.appendChild(wrapper);
+            });
         }
 
         function debouncedCalc() {
@@ -307,9 +353,12 @@
         function calculateLiveYields() {
             if(rawParcelsFeatures.length === 0) return;
 
+            // Get currently checked zones from the checklist
+            const activeZoneBoxes = document.querySelectorAll('.zoning-checkbox:checked');
+            const activeZonesArray = Array.from(activeZoneBoxes).map(cb => cb.value);
+
             const minArea = parseFloat(sldLot.value);
             const minWidth = parseFloat(sldWidth.value);
-            const activeZoning = filterZoning.value;
             const isUrbanChecked = chkUrban.checked;
             const isSuburbanChecked = chkSuburban.checked;
             const checkBldg = chkBuildings.checked;
@@ -325,11 +374,11 @@
                 const props = f.properties;
                 if (!props) continue;
                 
-                // 1. ZONING FILTER (Robust Getter)
+                // 1. ZONING FILTER (Multi-Select Array Check)
                 let pZoning = getFuzzyProperty(props, ["District_Key", "Zoning"]) || "Unknown";
-                if(activeZoning !== 'ALL' && pZoning.toString() !== activeZoning) continue;
+                if (!activeZonesArray.includes(pZoning.toString())) continue;
 
-                // 2. LOT WIDTH FILTER (Robust Getter)
+                // 2. LOT WIDTH FILTER 
                 let pWidth = getFuzzyProperty(props, ["MEAN_FRONT", "FRONTAGE", "WIDTH"]);
                 if (pWidth !== undefined && Number(pWidth) < minWidth) continue;
 
@@ -344,7 +393,7 @@
                 let netArea = props._cachedArea;
                 if (netArea < (minArea * 2)) continue;
 
-                // 5. HISTORIC FILTER (AABB Optimized)
+                // 5. HISTORIC FILTER 
                 let isHistoric = false;
                 if (checkHist && rawHistoricGeoJSON) {
                     if (!props._bbox) props._bbox = turf.bbox(f);
@@ -359,7 +408,7 @@
                 }
                 if(isHistoric) continue;
 
-                // 6. BUILDING DEDUCTION - CRASH FIX (Heuristic Subtraction)
+                // 6. BUILDING DEDUCTION
                 if (checkBldg && rawBuildingsGeoJSON) {
                     if (!props._bbox) props._bbox = turf.bbox(f);
                     const [pxMin, pyMin, pxMax, pyMax] = props._bbox;
@@ -367,8 +416,6 @@
                     for (let bldg of rawBuildingsGeoJSON.features) {
                         const [bxMin, byMin, bxMax, byMax] = bldg.properties._bbox;
                         if (pxMin <= bxMax && pxMax >= bxMin && pyMin <= byMax && pyMax >= byMin) {
-                            // Instead of slow geometric intersection, flatly deduct the building's total area
-                            // if it touches the parcel. Fast and extremely stable.
                             if (turf.booleanIntersects(f, bldg)) {
                                 netArea -= bldg.properties._flatArea;
                             }
