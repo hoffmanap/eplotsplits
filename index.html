@@ -25,14 +25,6 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
         #map-canvas { height: 100%; width: 100%; min-height: 500px; background: #0b0f19; }
-        
-        .leaflet-tooltip {
-            background: #0f172a;
-            border: 1px solid #1e293b;
-            color: #38bdf8;
-            font-family: 'Space Grotesk', sans-serif;
-            border-radius: 4px;
-        }
     </style>
 </head>
 <body class="text-slate-100 antialiased selection:bg-teal-500 selection:text-slate-900">
@@ -118,7 +110,7 @@
             <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-4 shadow-inner">
                 <label class="flex items-center gap-3 cursor-pointer group">
                     <input type="checkbox" id="param-toggle-footprints" class="w-4 h-4 accent-rose-500 rounded border-slate-700 cursor-pointer">
-                    <span class="text-xs text-slate-300 group-hover:text-slate-100 transition-colors">Deduct Building Footprints <span class="text-[9px] text-slate-500 block">(Increases calculation time)</span></span>
+                    <span class="text-xs text-slate-300 group-hover:text-slate-100 transition-colors">Deduct Building Footprints <span class="text-[9px] text-slate-500 block">(Optimized Runtime)</span></span>
                 </label>
                 <label class="flex items-center gap-3 cursor-pointer group">
                     <input type="checkbox" id="param-toggle-historic" class="w-4 h-4 accent-amber-500 rounded border-slate-700 cursor-pointer">
@@ -138,7 +130,10 @@
     </main>
 
     <script>
-        // Data & Maps
+        // Data Configuration
+        const ZONING_FIELD = "District_Key(String)";
+        const WIDTH_FIELD = "MEAN_FRONTAGE_WIDTH";
+
         let map;
         let parcelLayerGroup, hexLayerGroup, buildingLayer, historicLayer, contextLayerGroup;
         let rawParcelsFeatures = [];
@@ -153,7 +148,6 @@
         const sldLot = document.getElementById('param-min-lot');
         const sldWidth = document.getElementById('param-min-width');
         const filterZoning = document.getElementById('filter-zoning');
-        const ZONING_FIELD = "District_Key(String)";
         const chkUrban = document.getElementById('filter-context-urban');
         const chkSuburban = document.getElementById('filter-context-suburban');
         const chkBuildings = document.getElementById('param-toggle-footprints');
@@ -162,12 +156,9 @@
         let calcTimeout; 
 
         function initMap() {
-            // High-performance canvas renderer
             map = L.map('map-canvas', { center: [31.7619, -106.4850], zoom: 12, zoomControl: false, preferCanvas: true });
             
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; CARTO'
-            }).addTo(map);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; CARTO' }).addTo(map);
             L.control.zoom({ position: 'topright' }).addTo(map);
 
             parcelLayerGroup = L.layerGroup().addTo(map);
@@ -182,7 +173,7 @@
                 "Analysis Hexagons": hexLayerGroup 
             }, { position: 'bottomright' }).addTo(map);
 
-            // Debounce event listeners
+            // Bind Event Listeners
             sldLot.addEventListener('input', (e) => { document.getElementById('val-min-lot').innerText = Number(e.target.value).toLocaleString(); debouncedCalc(); });
             sldWidth.addEventListener('input', (e) => { document.getElementById('val-min-width').innerText = e.target.value; debouncedCalc(); });
             filterZoning.addEventListener('change', debouncedCalc);
@@ -220,21 +211,35 @@
                     }
                 }
 
-                setFeedback("Step 2/3: Fetching Context & Regulatory Overlays...", true);
+                setFeedback("Step 2/3: Fetching Context & Pre-calculating Spatial Indexes...", true);
                 const [resBldg, resHist, resCtx] = await Promise.all([
                     fetch('data/eligible_buildings.geojson').catch(()=>null),
                     fetch('data/historic.geojson').catch(()=>null),
                     fetch('data/context_areas.geojson').catch(()=>null)
                 ]);
                 
-                if(resBldg && resBldg.ok) rawBuildingsGeoJSON = await resBldg.json();
-                if(resHist && resHist.ok) rawHistoricGeoJSON = await resHist.json();
+                // Building Footprints (Pre-calculate Bounding Boxes for Hyper-Fast Math)
+                if(resBldg && resBldg.ok) {
+                    rawBuildingsGeoJSON = await resBldg.json();
+                    rawBuildingsGeoJSON.features.forEach(f => {
+                        f.properties = f.properties || {};
+                        f.properties._bbox = turf.bbox(f); // Cache bounds
+                    });
+                }
                 
-                // Parse Context Areas to prep for spatial intersection
+                // Historic Districts (Pre-calculate Bounding Boxes)
+                if(resHist && resHist.ok) {
+                    rawHistoricGeoJSON = await resHist.json();
+                    rawHistoricGeoJSON.features.forEach(f => {
+                        f.properties = f.properties || {};
+                        f.properties._bbox = turf.bbox(f);
+                    });
+                }
+                
+                // Parse Context Areas
                 if(resCtx && resCtx.ok) {
                     const ctxData = await resCtx.json();
                     L.geoJSON(ctxData, { style: { color: '#2dd4bf', weight: 1, fillOpacity: 0.05, dashArray: '5,5' }, interactive: false }).addTo(contextLayerGroup);
-                    
                     parsedContextAreas = ctxData.features.map(f => {
                         const propsStr = JSON.stringify(f.properties || {}).toLowerCase();
                         let type = 'Unknown';
@@ -249,17 +254,15 @@
                     const res = await fetch(`data/eligible_parcels_${i}.geojson`).catch(()=>null);
                     if(res && res.ok) {
                         const data = await res.json();
-                        
-                        // Tag each parcel with its spatial Context during load to keep sliders fast
                         data.features.forEach(f => {
+                            f.properties = f.properties || {};
                             f.properties._calculatedContext = 'Unknown';
                             if (parsedContextAreas.length > 0) {
                                 try {
-                                    let center = turf.center(f); // Find center point of parcel
+                                    let center = turf.center(f);
                                     for (let ctx of parsedContextAreas) {
                                         if (turf.booleanPointInPolygon(center, ctx.poly)) {
-                                            f.properties._calculatedContext = ctx.type;
-                                            break;
+                                            f.properties._calculatedContext = ctx.type; break;
                                         }
                                     }
                                 } catch(e) {}
@@ -280,23 +283,13 @@
 
         function populateDynamicDropdowns() {
             let zones = new Set();
-rawParcelsFeatures.forEach(f => {
-                let val = f.properties[ZONING_FIELD];
-                if (val) zones.add(val.toString());
-            });
-            Array.from(zones).sort().forEach(z => { filterZoning.add(new Option(z, z)); });
-            
             rawParcelsFeatures.forEach(f => {
                 if (!f.properties) return;
-                
-                // Target District_Key directly, case-insensitive
-                let dKey = f.properties.District_Key || f.properties.DISTRICT_KEY || f.properties.district_key;
+                let dKey = f.properties[ZONING_FIELD];
                 if (dKey && dKey.toString().trim() !== '') {
                     zones.add(dKey.toString().trim());
                 }
             });
-
-            // Populate Sorting Alphabetically
             Array.from(zones).sort().forEach(z => { filterZoning.add(new Option(z, z)); });
         }
 
@@ -309,6 +302,7 @@ rawParcelsFeatures.forEach(f => {
             if(rawParcelsFeatures.length === 0) return;
 
             const minArea = parseFloat(sldLot.value);
+            const minWidth = parseFloat(sldWidth.value);
             const activeZoning = filterZoning.value;
             const isUrbanChecked = chkUrban.checked;
             const isSuburbanChecked = chkSuburban.checked;
@@ -325,45 +319,63 @@ rawParcelsFeatures.forEach(f => {
                 const props = f.properties;
                 if (!props) continue;
                 
-                // 1. Zoning Check
-                let pZoning = props.District_Key || props.DISTRICT_KEY || props.district_key || "Unknown";
+                // 1. Zoning Filter Fix
+                let pZoning = props[ZONING_FIELD] || "Unknown";
                 if(activeZoning !== 'ALL' && pZoning.toString() !== activeZoning) continue;
 
-                // 2. Context Check (Using the pre-calculated tags from step 3)
+                // 2. Minimum Lot Width Logic Fix
+                let pWidth = props[WIDTH_FIELD];
+                if (pWidth === undefined) pWidth = props[WIDTH_FIELD.toLowerCase()];
+                // Exclude parcels strictly smaller than the minimum width threshold
+                if (pWidth !== undefined && Number(pWidth) < minWidth) continue;
+
+                // 3. Context Filter
                 let pContext = props._calculatedContext;
                 if (!isUrbanChecked && pContext === 'Urban') continue;
                 if (!isSuburbanChecked && pContext === 'Suburban') continue;
-                if (!isUrbanChecked && !isSuburbanChecked) continue; // Both unchecked = show none
+                if (!isUrbanChecked && !isSuburbanChecked) continue;
 
-                // 3. Lazy Area Check
-                if (!props._cachedArea) {
-                    props._cachedArea = turf.area(f) * 10.7639;
-                }
+                // 4. Lazy Area Fetching
+                if (!props._cachedArea) props._cachedArea = turf.area(f) * 10.7639;
                 let netArea = props._cachedArea;
                 if (netArea < (minArea * 2)) continue;
 
-                // 4. Historic Overlay Check
+                // 5. Historic Bounds Check (AABB Optimized)
                 let isHistoric = false;
                 if (checkHist && rawHistoricGeoJSON) {
+                    if (!props._bbox) props._bbox = turf.bbox(f);
+                    const [pxMin, pyMin, pxMax, pyMax] = props._bbox;
+
                     for(let block of rawHistoricGeoJSON.features) {
-                        if(turf.booleanIntersects(f, block)) { isHistoric = true; break; }
+                        const [hxMin, hyMin, hxMax, hyMax] = block.properties._bbox;
+                        // Fast rectangular collision check
+                        if (pxMin <= hxMax && pxMax >= hxMin && pyMin <= hyMax && pyMax >= hyMin) {
+                            if(turf.booleanIntersects(f, block)) { isHistoric = true; break; }
+                        }
                     }
                 }
                 if(isHistoric) continue;
 
-                // 5. Building Footprint Deduction Check
+                // 6. Building Footprint Overlaps (AABB Optimized)
                 if (checkBldg && rawBuildingsGeoJSON) {
+                    if (!props._bbox) props._bbox = turf.bbox(f);
+                    const [pxMin, pyMin, pxMax, pyMax] = props._bbox;
+
                     for (let bldg of rawBuildingsGeoJSON.features) {
-                        if (turf.booleanIntersects(f, bldg)) {
-                            try {
-                                const overlap = turf.intersection(turf.featureCollection([f, bldg]));
-                                if (overlap) netArea -= (turf.area(overlap) * 10.7639);
-                            } catch(err) {}
+                        const [bxMin, byMin, bxMax, byMax] = bldg.properties._bbox;
+                        // Extremely fast rectangle intersection check bypassing turf math
+                        if (pxMin <= bxMax && pxMax >= bxMin && pyMin <= byMax && pyMax >= byMin) {
+                            if (turf.booleanIntersects(f, bldg)) {
+                                try {
+                                    const overlap = turf.intersection(turf.featureCollection([f, bldg]));
+                                    if (overlap) netArea -= (turf.area(overlap) * 10.7639);
+                                } catch(err) {}
+                            }
                         }
                     }
                 }
 
-                // Final Pass
+                // Final Clearance Pass
                 if (netArea >= (minArea * 2)) {
                     eligibleCount++;
                     yieldCount += 2;
@@ -371,7 +383,6 @@ rawParcelsFeatures.forEach(f => {
                 }
             }
 
-            // Update UI
             statEligible.innerText = eligibleCount.toLocaleString();
             statYield.innerText = yieldCount.toLocaleString();
 
